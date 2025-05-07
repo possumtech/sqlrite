@@ -1,0 +1,27 @@
+{
+  "name": "sqlrite",
+  "version": "0.1.1",
+  "description": "SQL Done Right",
+  "keywords": [
+    "node",
+    "sqlite",
+    "sql",
+    "orm",
+    "database"
+  ],
+  "homepage": "https://github.com/possumtech/sqlrite#readme",
+  "bugs": {
+    "url": "https://github.com/possumtech/sqlrite/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/possumtech/sqlrite.git"
+  },
+  "license": "MIT",
+  "author": "@wikitopian",
+  "type": "module",
+  "main": "sqlrite.js",
+  "scripts": {
+    "test": "node ./test/test.js"
+  }
+}
