@@ -5,7 +5,7 @@ SQL Done Right
 ## About sqlrite
 
 The sqlrite package is a modern node module that delivers an opinionated
-alternative to ORMS.
+alternative to ORMs.
 
 ## Opinions
 
@@ -15,8 +15,13 @@ alternative to ORMS.
 contains a native sqlite module. Sqlite is the standard for SQL.
 
 3. **Simplicity**: It takes as much time to master an ORM as it would take to
-just master SQL, and with worse performance. But inline SQL is insecure, hard
-to maintain, and error-prone.
+just master SQL, and with worse performance. For all but the most distributed,
+concurrent, and custom use cases, sqlite is the best choice.
+
+4. **Security**: Inline SQL is insecure, hard to maintain, and error-prone.
+
+5. **Separation**: SQL code should be in separate SQL files rather than
+scattered throughout your JS codebase.
 
 ## Solution
 
@@ -36,10 +41,10 @@ Statements are best for the queries you will be running.
 ```sql
 -- TX: createEmployeeTable
 CREATE TABLE IF NOT EXISTS employees (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL,
-		position TEXT NOT NULL,
-		salary REAL NOT NULL
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL,
+	position TEXT NOT NULL,
+	salary REAL NOT NULL
 );
 
 -- PS: addEmployee
@@ -47,7 +52,7 @@ INSERT INTO employees (name, position, salary)
 	VALUES ($name, $position, $salary);
 
 -- PS: getTopEmployee
-SELECT name FROM employees ORDER BY salary LIMIT 1;
+SELECT name FROM employees ORDER BY salary DESC LIMIT 1;
 ```
 
 **Example Node File**
@@ -87,10 +92,10 @@ import sqlrite from "sqlrite";
 
 const sql = new sqlrite(options = {
 		// Custom SQLite database file path.
-		path: ':memory',
+		path: ":memory:",
 
 		// Path to your SQL directory.
-		dir: './sql',
+		dir: "./sql",
 });
 ```
 
