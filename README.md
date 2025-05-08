@@ -173,5 +173,13 @@ const sql = new SqlRite({
 });
 ```
 
+You will almost certainly wish to replace the `path` with a path to your
+database file. Otherwise, the database will be created in memory and lost when
+the process ends.
+
+```js
+const sql = new SqlRite({ path: "path/to/your/database.sqlite3" });
+```
+
 Additional arguments will be passed to the options object of the native sqlite
 module.
