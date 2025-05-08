@@ -47,7 +47,7 @@ them all.
 
 There are three types of "chunk" one can add to a `.sql` file:
 
-1. **INIT**: A transaction that is executed when the database is first created.
+1. **INIT**: A transaction that is executed when the module is instantiated.
 This is where you should create your tables, for example.
 
 2. **EXEC**: A transaction that can be executed at any time. For example,
@@ -109,24 +109,34 @@ sql.deleteTable();
 
 ## Installation
 
-Navigate to your project directory and run the following command:
+1. Navigate to your project directory and run the following command:
 
 ```bash
 npm install @possumtech/sqlrite
 ```
 
+2. Then create a `sql` directory in your project directory. This is where you
+will put your SQL files.
+
+```bash
+mkdir sql
+cd sql
+touch exampleFile.sql
+```
+
 ## Configuration
 
 ```js
-import sqlrite from "sqlrite";
+import SqlRite from "@possumtech/sqlrite";
 
-const sql = new sqlrite(options = {
-		// Custom SQLite database file path.
-		path: ":memory:",
+const sql = new SqlRite({
+	// SQLite database file path.
+	path: ":memory:",
 
-		// Path to your SQL directory.
-		dir: "./sql",
+	// Path to your SQL directory.
+	dir: "sql/",
 });
 ```
+
 Additional arguments will be passed to the options object of the native sqlite
 module.
