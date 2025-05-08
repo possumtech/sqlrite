@@ -55,7 +55,36 @@ This is where you should create your tables, for example.
 	 not prepared statements, like maintaining your database.
 
 3. **PREP**: A prepared statement that can be executed at any time. This is
-where you should put your queries.
+where you should put your queries. After declaring a prepared statement, you can
+then run it with either the `.all({})`, `.get({})` or `.run({})` methods, as per
+the native sqlite API.
+
+| Method     | Description                                           |
+|------------|-------------------------------------------------------|
+| `.all({})` | Returns all rows that match the query.                |
+| `.get({})` | Returns the first row that matches the query.         |
+| `.run({})` | Executes the query and returns the (optional) result. |
+
+### Synchronous/Asynchronous
+
+The native sqlite module currently only supports synchronous operations. This
+can pose a performance issue in some common cases. Sqlrite addresses this by
+allowing one to run one's queries asynchronously by appending `.async`:
+
+For example, instead of:
+
+**Synchronous**
+
+```js
+console.log(sql.getPositions.all());
+```
+
+**Asynchronous**
+
+```js
+sql.async.getPositions.all().then((positions) => console.log(positions));
+```
+
 
 **Example SQL File**
 
@@ -83,6 +112,9 @@ END TRANSACTION;
 INSERT INTO employees (name, position, salary)
 	VALUES ($name, $position, $salary);
 
+-- PREP: getPositions
+SELECT name, position FROM employees;
+
 -- PREP: getHighestPaidEmployee
 SELECT name FROM employees ORDER BY salary DESC LIMIT 1;
 ```
@@ -101,10 +133,13 @@ sql.addEmployee.run({ name: "Jill", position: "CIO", salary: 49996 });
 
 const employee = sql.getHighestPaidEmployee.get();
 
+assert(employee?.name === "John", "The highest paid employee should be John");
+
+sql.async.getPositions.all().then((positions) => console.log(positions));
+
 console.log(`The highest paid employee is ${employee.name}.`);
 
 sql.deleteTable();
-
 ```
 
 ## Installation

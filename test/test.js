@@ -12,6 +12,8 @@ const employee = sql.getHighestPaidEmployee.get();
 
 assert(employee?.name === "John", "The highest paid employee should be John");
 
+sql.async.getPositions.all().then((positions) => console.log(positions));
+
 console.log(`The highest paid employee is ${employee.name}.`);
 
 sql.deleteTable();

@@ -16,6 +16,8 @@ export default class SqlRite {
 		const files = fs.readdirSync(dir);
 		const code = files.map((f) => fs.readFileSync(dir + f, "utf8")).join("");
 
+		this.async = {};
+
 		const chunks =
 			/-- (?<chunk>(?<type>INIT|EXEC|PREP): (?<name>\w+)\n(?<sql>.*?))($|(?=-- (INIT|EXEC|PREP):))/gs;
 
@@ -27,9 +29,15 @@ export default class SqlRite {
 					break;
 				case "EXEC":
 					this[name] = () => db.exec(sql);
+					this.async[name] = async () => db.exec(sql);
 					break;
 				case "PREP":
 					this[name] = db.prepare(sql);
+
+					this.async[name] = {};
+					this.async[name].all = async (params = {}) => this[name].all(params);
+					this.async[name].get = async (params = {}) => this[name].get(params);
+					this.async[name].run = async (params = {}) => this[name].run(params);
 					break;
 			}
 		}

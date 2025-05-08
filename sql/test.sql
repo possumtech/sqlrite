@@ -21,5 +21,8 @@ END TRANSACTION;
 INSERT INTO employees (name, position, salary)
 	VALUES ($name, $position, $salary);
 
+-- PREP: getPositions
+SELECT name, position FROM employees;
+
 -- PREP: getHighestPaidEmployee
 SELECT name FROM employees ORDER BY salary DESC LIMIT 1;
