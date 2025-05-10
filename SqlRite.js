@@ -21,25 +21,38 @@ export default class SqlRite {
 		const chunks =
 			/-- (?<chunk>(?<type>INIT|EXEC|PREP): (?<name>\w+)\n(?<sql>.*?))($|(?=-- (INIT|EXEC|PREP):))/gs;
 
+		const initChunks = [];
+		const execChunks = [];
+		const prepChunks = [];
+
 		for (const chunk of code.matchAll(chunks)) {
 			const { type, name, sql } = chunk.groups;
-			switch (type) {
-				case "INIT":
-					db.exec(sql);
-					break;
-				case "EXEC":
-					this[name] = () => db.exec(sql);
-					this.async[name] = async () => db.exec(sql);
-					break;
-				case "PREP":
-					this[name] = db.prepare(sql);
 
-					this.async[name] = {};
-					this.async[name].all = async (params = {}) => this[name].all(params);
-					this.async[name].get = async (params = {}) => this[name].get(params);
-					this.async[name].run = async (params = {}) => this[name].run(params);
-					break;
-			}
+			if (type === "INIT") initChunks.push(chunk.groups);
+			if (type === "EXEC") execChunks.push(chunk.groups);
+			if (type === "PREP") prepChunks.push(chunk.groups);
 		}
+
+		initChunks.forEach((init) => db.exec(init.sql));
+
+		execChunks.forEach((exec) => {
+			this[exec.name] = () => db.exec(exec.sql);
+			this.async[exec.name] = async () => db.exec(exec.sql);
+		});
+
+		prepChunks.forEach((prep) => {
+			this[prep.name] = db.prepare(prep.sql);
+
+			this.async[prep.name] = {};
+
+			this.async[prep.name].all = async (params = {}) =>
+				this[prep.name].all(params);
+
+			this.async[prep.name].get = async (params = {}) =>
+				this[prep.name].get(params);
+
+			this.async[prep.name].run = async (params = {}) =>
+				this[prep.name].run(params);
+		});
 	}
 }
