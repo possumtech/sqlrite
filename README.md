@@ -169,7 +169,7 @@ const sql = new SqlRite({
 	path: ":memory:",
 
 	// Path to your SQL directory.
-	dir: "sql/",
+	dir: "sql",
 });
 ```
 
