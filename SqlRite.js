@@ -5,16 +5,16 @@ export default class SqlRite {
 	constructor(options = {}) {
 		const defaults = {
 			path: ":memory:",
-			dir: "sql/",
+			dir: "sql",
 		};
 
 		const merged = { ...defaults, ...options };
 
 		const db = new DatabaseSync(merged.path, merged);
 
-		const { dir } = merged;
-		const files = fs.readdirSync(dir);
-		const code = files.map((f) => fs.readFileSync(dir + f, "utf8")).join("");
+		const files = this.getFiles(merged.dir);
+
+		const code = files.map((f) => fs.readFileSync(f, "utf8")).join("");
 
 		this.async = {};
 
@@ -56,5 +56,18 @@ export default class SqlRite {
 			this.async[prep.name].run = async (params = {}) =>
 				this[prep.name].run(params);
 		});
+	}
+
+	getFiles(dir) {
+		const files = [];
+
+		for (const item of fs.readdirSync(dir)) {
+			const path = `${dir}/${item}`;
+
+			if (fs.lstatSync(path).isDirectory()) files.push(...this.getFiles(path));
+			else if (item.endsWith(".sql")) files.push(path);
+		}
+
+		return files;
 	}
 }
