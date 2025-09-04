@@ -26,14 +26,16 @@ export default class SqlRite {
 		const prepChunks = [];
 
 		for (const chunk of code.matchAll(chunks)) {
-			const { type, name, sql } = chunk.groups;
+			const { type } = chunk.groups;
 
 			if (type === "INIT") initChunks.push(chunk.groups);
 			if (type === "EXEC") execChunks.push(chunk.groups);
 			if (type === "PREP") prepChunks.push(chunk.groups);
 		}
 
-		initChunks.forEach((init) => db.exec(init.sql));
+		initChunks.forEach((init) => {
+			db.exec(init.sql);
+		});
 
 		execChunks.forEach((exec) => {
 			this[exec.name] = () => db.exec(exec.sql);
