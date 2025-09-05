@@ -70,6 +70,6 @@ export default class SqlRite {
 			else if (item.endsWith(".sql")) files.push(path);
 		}
 
-		return files;
+		return files.sort();
 	}
 }
