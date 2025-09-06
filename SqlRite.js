@@ -12,6 +12,8 @@ export default class SqlRite {
 
 		const db = new DatabaseSync(merged.path, merged);
 
+		this.close = () => db.close();
+
 		// allow multiple directories
 		if (!Array.isArray(merged.dir)) merged.dir = [merged.dir];
 		const files = merged.dir.flatMap((d) => this.getFiles(d));

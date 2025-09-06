@@ -183,3 +183,5 @@ const sql = new SqlRite({ path: "path/to/your/database.sqlite3" });
 
 Additional arguments will be passed to the options object of the native sqlite
 module.
+
+To close the database connection, call the `.close()` method:
