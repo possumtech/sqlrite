@@ -47,18 +47,26 @@ export default class SqlRite {
 		});
 
 		prepChunks.forEach((prep) => {
-			this[prep.name] = db.prepare(prep.sql);
+			const stmt = db.prepare(prep.sql);
+			this[prep.name] = {};
+
+			this[prep.name].all = (params = {}) => stmt.all(this.doJsonify(params));
+			this[prep.name].get = (params = {}) => stmt.get(this.doJsonify(params));
+			this[prep.name].run = (params = {}) => stmt.run(this.doJsonify(params));
 
 			this.async[prep.name] = {};
 
-			this.async[prep.name].all = async (params = {}) =>
-				this[prep.name].all(params);
+			this.async[prep.name].all = async (params = {}) => {
+				return stmt.all(this.doJsonify(params));
+			};
 
-			this.async[prep.name].get = async (params = {}) =>
-				this[prep.name].get(params);
+			this.async[prep.name].get = async (params = {}) => {
+				return stmt.get(this.doJsonify(params));
+			};
 
-			this.async[prep.name].run = async (params = {}) =>
-				this[prep.name].run(params);
+			this.async[prep.name].run = async (params = {}) => {
+				return stmt.run(this.doJsonify(params));
+			};
 		});
 	}
 
@@ -73,5 +81,15 @@ export default class SqlRite {
 		}
 
 		return files.sort();
+	}
+
+	doJsonify(params) {
+		for (const param in params) {
+			if (Array.isArray(params[param])) {
+				params[param] = JSON.stringify(params[param]);
+			}
+		}
+
+		return params;
 	}
 }

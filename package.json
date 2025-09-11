@@ -23,6 +23,7 @@
 	"main": "SqlRite.js",
 	"scripts": {
 		"lint": "npx @biomejs/biome check *.js",
-		"test": "node --experimental-test-coverage --trace-warnings --inspect --test"
+		"test": "node --experimental-test-coverage --inspect --test",
+		"debug": "node --experimental-test-coverage --inspect-brk --test"
 	}
 }

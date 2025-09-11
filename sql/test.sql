@@ -26,3 +26,10 @@ SELECT name, position FROM employees;
 
 -- PREP: getHighestPaidEmployee
 SELECT name FROM employees ORDER BY salary DESC LIMIT 1;
+
+-- PREP: getMultiEmployees
+SELECT name, position, salary FROM
+employees WHERE name IN (SELECT value FROM json_each($names));
+
+-- PREP: deleteEmployees
+DELETE FROM employees WHERE name IN (SELECT value FROM json_each($names));
