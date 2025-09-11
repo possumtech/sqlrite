@@ -22,7 +22,7 @@
 	"type": "module",
 	"main": "SqlRite.js",
 	"scripts": {
-		"lint": "npx @biomejs/biome check",
+		"lint": "npx @biomejs/biome check *.js",
 		"test": "node --experimental-test-coverage --trace-warnings --inspect --test"
 	}
 }
