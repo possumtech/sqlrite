@@ -1,22 +1,28 @@
 import assert from "node:assert";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import SqlRite, { SqlRiteSync } from "../SqlRite.js";
 import SqlRiteCore from "../SqlRiteCore.js";
-import fs from "node:fs";
-import path from "node:path";
 
 test("SqlRiteCore", (t) => {
 	t.test("getFiles() should sort numerically", () => {
 		const files = SqlRiteCore.getFiles("sql");
-		const basenames = files.map(f => path.basename(f));
-		assert.ok(basenames.indexOf("001-init.sql") < basenames.indexOf("002-data.sql"), "001 should come before 002");
+		const basenames = files.map((f) => path.basename(f));
+		assert.ok(
+			basenames.indexOf("001-init.sql") < basenames.indexOf("002-data.sql"),
+			"001 should come before 002",
+		);
 	});
 
 	t.test("getFiles() handles subdirectories", () => {
 		if (!fs.existsSync("sql/sub")) fs.mkdirSync("sql/sub");
 		fs.writeFileSync("sql/sub/999-last.sql", "-- INIT: subInit\nSELECT 1;");
 		const files = SqlRiteCore.getFiles("sql");
-		assert.ok(files.some(f => f.includes("999-last.sql")), "Should find file in subdirectory");
+		assert.ok(
+			files.some((f) => f.includes("999-last.sql")),
+			"Should find file in subdirectory",
+		);
 	});
 
 	t.test("parseSql() filters empty and trims", () => {
@@ -32,13 +38,17 @@ test("SqlRiteCore", (t) => {
 		assert.strictEqual(output.obj, '{"a":1}');
 		assert.strictEqual(output.str, "val");
 		assert.strictEqual(output.nil, null);
-		assert.deepStrictEqual(SqlRiteCore.jsonify(null), {}, "Should return empty object for null params");
+		assert.deepStrictEqual(
+			SqlRiteCore.jsonify(null),
+			{},
+			"Should return empty object for null params",
+		);
 	});
 });
 
 test("SqlRiteSync", (t) => {
 	const sql = new SqlRiteSync();
-	
+
 	t.test("initialization and INIT chunks", () => {
 		const res = sql.getPositions.all();
 		assert.ok(Array.isArray(res), "Should be able to call prepped statements");
@@ -80,7 +90,7 @@ test("SqlRite (Async)", async (t) => {
 		await sql.addEmployee.run({ name: "Async", position: "Dev", salary: 200 });
 		await sql.getPositions.all();
 		await sql.getPositions.get();
-		
+
 		// To hit 100% functions, call all variants (all, get, run) even if they don't make sense for the SQL
 		await sql.getPositions.run();
 		await sql.getPositions.get();
@@ -104,7 +114,7 @@ test("SqlRite (Async)", async (t) => {
 			await sql.nonExistentPrep.all();
 			await sql.nonExistentPrep.get();
 			await sql.nonExistentPrep.run();
-			
+
 			// Access non-all/get/run to hit Proxy get's else branch
 			const val = sql.nonExistentPrep.somethingElse;
 			assert.strictEqual(val, undefined);
@@ -114,7 +124,9 @@ test("SqlRite (Async)", async (t) => {
 	});
 
 	await t.test("Raw SQL execution", async () => {
-		await sql.exec("CREATE TABLE IF NOT EXISTS raw_test (id INTEGER PRIMARY KEY)");
+		await sql.exec(
+			"CREATE TABLE IF NOT EXISTS raw_test (id INTEGER PRIMARY KEY)",
+		);
 		await sql.exec("INSERT INTO raw_test DEFAULT VALUES");
 	});
 
@@ -133,7 +145,7 @@ test("SqlRite (Async)", async (t) => {
 	});
 });
 
-test("Multi-directory support", (t) => {
+test("Multi-directory support", (_t) => {
 	if (!fs.existsSync("sql2")) fs.mkdirSync("sql2");
 	fs.writeFileSync("sql2/extra.sql", "-- PREP: extra\nSELECT 1 as val;");
 	const sql = new SqlRiteSync({ dir: ["sql", "sql2"] });

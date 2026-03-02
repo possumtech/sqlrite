@@ -1,6 +1,6 @@
-import { Worker } from "node:worker_threads";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 import SqlRiteSync from "./SqlRiteSync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -41,8 +41,9 @@ export default class SqlRite {
 		});
 
 		// Fallback for methods not yet defined or dynamic ones
+		// biome-ignore lint/correctness/noConstructorReturn: Required for dynamic Proxy API
 		return new Proxy(this, {
-			get: (target, prop, receiver) => {
+			get: (target, prop, _receiver) => {
 				if (prop in target) {
 					const val = target[prop];
 					if (typeof val === "function") return val.bind(target);
@@ -53,16 +54,22 @@ export default class SqlRite {
 				}
 				// Return a proxy that can handle .all(), .get(), .run() or direct calls
 				return new Proxy(() => {}, {
-					apply: (t, thisArg, args) => {
+					apply: (_t, _thisArg, args) => {
 						return target.#callWorker("EXEC", prop, null, args[0]);
 					},
-					get: (t, method) => {
+					get: (_t, method) => {
 						if (["all", "get", "run"].includes(method)) {
-							return (params) => target.#callWorker(`PREP_${method.toUpperCase()}`, prop, null, params);
+							return (params) =>
+								target.#callWorker(
+									`PREP_${method.toUpperCase()}`,
+									prop,
+									null,
+									params,
+								);
 						}
-					}
+					},
 				});
-			}
+			},
 		});
 	}
 

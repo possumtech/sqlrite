@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Mandated by project style
 export default class SqlRiteCore {
 	static getFiles(dir) {
 		const files = [];
@@ -10,7 +11,7 @@ export default class SqlRiteCore {
 		for (const item of items) {
 			const fullPath = path.join(dir, item.name);
 			if (item.isDirectory()) {
-				files.push(...this.getFiles(fullPath));
+				files.push(...SqlRiteCore.getFiles(fullPath));
 			} else if (item.name.endsWith(".sql")) {
 				files.push(fullPath);
 			}
@@ -64,10 +65,12 @@ export default class SqlRiteCore {
 
 		// Trim SQL and filter out empty chunks
 		for (const type in chunks) {
-			chunks[type] = chunks[type].map(c => ({
-				...c,
-				sql: c.sql.trim()
-			})).filter(c => c.sql.length > 0);
+			chunks[type] = chunks[type]
+				.map((c) => ({
+					...c,
+					sql: c.sql.trim(),
+				}))
+				.filter((c) => c.sql.length > 0);
 		}
 
 		return chunks;
@@ -77,7 +80,12 @@ export default class SqlRiteCore {
 		if (!params) return {};
 		const result = { ...params };
 		for (const key in result) {
-			if (Array.isArray(result[key]) || (result[key] !== null && typeof result[key] === "object" && result[key].constructor === Object)) {
+			if (
+				Array.isArray(result[key]) ||
+				(result[key] !== null &&
+					typeof result[key] === "object" &&
+					result[key].constructor === Object)
+			) {
 				result[key] = JSON.stringify(result[key]);
 			}
 		}

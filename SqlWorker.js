@@ -1,5 +1,5 @@
-import { parentPort, workerData } from "node:worker_threads";
 import { DatabaseSync } from "node:sqlite";
+import { parentPort, workerData } from "node:worker_threads";
 import SqlRiteCore from "./SqlRiteCore.js";
 
 const { options } = workerData;
@@ -52,7 +52,10 @@ parentPort.on("message", (msg) => {
 });
 
 // Signal ready
-parentPort.postMessage({ type: "READY", names: {
-	EXEC: chunks.EXEC.map(e => e.name),
-	PREP: chunks.PREP.map(p => p.name)
-}});
+parentPort.postMessage({
+	type: "READY",
+	names: {
+		EXEC: chunks.EXEC.map((e) => e.name),
+		PREP: chunks.PREP.map((p) => p.name),
+	},
+});
