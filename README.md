@@ -67,31 +67,64 @@ the native sqlite API.
 
 ### Synchronous/Asynchronous
 
-The native sqlite module currently only supports synchronous operations. This
-can pose a performance issue in some common cases. Sqlrite addresses this by
-allowing one to run one's queries asynchronously by appending `.async`:
+Sqlrite now provides both asynchronous and synchronous models. The default export is fully asynchronous, offloading database operations to a separate Worker Thread to ensure your main event loop remains unblocked.
 
-For example, instead of:
+### Asynchronous (Default)
 
-**Synchronous**
+The asynchronous model uses worker threads and returns Promises.
 
 ```js
-console.log(sql.getPositions.all());
+import SqlRite from "@possumtech/sqlrite";
+
+const sql = new SqlRite();
+
+// Prepped statements return Promises
+const positions = await sql.getPositions.all();
+
+// Executable transactions are also async
+await sql.deleteTable();
+
+// Raw SQL execution
+await sql.exec("CREATE TABLE test (id INTEGER)");
+
+await sql.close();
 ```
 
-**Asynchronous**
+### Synchronous
+
+For CLI tools or scripts where blocking is acceptable or preferred, use `SqlRiteSync`.
 
 ```js
-sql.async.getPositions.all().then((positions) => console.log(positions));
+import { SqlRiteSync } from "@possumtech/sqlrite";
+
+const sql = new SqlRiteSync();
+
+const positions = sql.getPositions.all();
+sql.close();
 ```
 
+## Features
 
-**Example SQL File**
+1. **Worker Threads**: The default async model runs the database in a separate thread, providing true non-blocking I/O.
+2. **Numerical Migrations**: SQL files are processed in a numerically linear order (e.g., `001-init.sql`, `002-data.sql`).
+3. **Robust Parser**: Improved SQL extraction that correctly handles complex files and metadata headers.
+4. **Enhanced JSON Support**: Automatically detects arrays and objects in parameters and converts them to JSON strings for SQLite's `json_each` and other JSON functions.
+5. **Zero-Config Prepared Statements**: Just define them in your `.sql` files with `-- PREP:` and they are automatically compiled and exposed as methods.
+
+## SQL Syntax
+
+Add a `sql` folder to your project and include as many `.sql` files as you wish. Files are sorted numerically by their filename prefix.
+
+| Syntax              | Name                   | Description            |
+|---------------------|------------------------|------------------------|
+| `-- INIT: txName`   | Initial Transaction    | Executed once on init  |
+| `-- EXEC: txName`   | Executable Transaction | Exposes a method       |
+| `-- PREP: stmtName` | Prepared Statement     | Pre-compiled statement |
+
+**Example SQL File (`001-init.sql`)**
 
 ```sql
 -- INIT: createEmployeeTable
-BEGIN TRANSACTION;
-
 CREATE TABLE IF NOT EXISTS employees (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT NOT NULL,
@@ -99,64 +132,12 @@ CREATE TABLE IF NOT EXISTS employees (
 	salary REAL NOT NULL
 );
 
-END TRANSACTION;
-
--- EXEC: deleteTable
-BEGIN TRANSACTION;
-
-DROP TABLE IF EXISTS employees;
-
-END TRANSACTION;
-
 -- PREP: addEmployee
 INSERT INTO employees (name, position, salary)
 	VALUES ($name, $position, $salary);
 
 -- PREP: getPositions
 SELECT name, position FROM employees;
-
--- PREP: getHighestPaidEmployee
-SELECT name FROM employees ORDER BY salary DESC LIMIT 1;
-```
-
-**Example Node File**
-
-```js
-import SqlRite from "@possumtech/sqlrite";
-
-const sql = new SqlRite();
-
-sql.addEmployee.run({ name: "John", position: "CEO", salary: 99999 });
-sql.addEmployee.run({ name: "Jane", position: "COO", salary: 49998 });
-sql.addEmployee.run({ name: "Jack", position: "CFO", salary: 49997 });
-sql.addEmployee.run({ name: "Jill", position: "CIO", salary: 49996 });
-
-const employee = sql.getHighestPaidEmployee.get();
-
-assert(employee?.name === "John", "The highest paid employee should be John");
-
-sql.async.getPositions.all().then((positions) => console.log(positions));
-
-console.log(`The highest paid employee is ${employee.name}.`);
-
-sql.deleteTable();
-```
-
-## Installation
-
-1. Navigate to your project directory and run the following command:
-
-```bash
-npm install @possumtech/sqlrite
-```
-
-2. Then create a `sql` directory in your project directory. This is where you
-will put your SQL files.
-
-```bash
-mkdir sql
-cd sql
-touch exampleFile.sql
 ```
 
 ## Configuration
@@ -165,11 +146,8 @@ touch exampleFile.sql
 import SqlRite from "@possumtech/sqlrite";
 
 const sql = new SqlRite({
-	// SQLite database file path.
-	path: ":memory:",
-
-	// Path to your SQL directory.
-	dir: "sql",
+	path: "database.sqlite", // Path to SQLite file (default: ":memory:")
+	dir: "sql",              // SQL directory (default: "sql")
 });
 ```
 

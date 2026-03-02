@@ -1,22 +1,30 @@
-import { Database, DatabaseSync, Statement } from 'node:sqlite';
+import { Statement } from 'node:sqlite';
 
-interface SqlRiteOptions {
+export interface SqlRiteOptions {
 	path?: string;
-	dir?: string;
+	dir?: string | string[];
 }
 
-interface SqlRiteAsyncPreparedStatements {
+export interface SqlRitePreparedStatements {
 	all: (params?: Record<string, any>) => Promise<any[]>;
 	get: (params?: Record<string, any>) => Promise<any>;
-	run: (params?: Record<string, any>) => Promise<void>;
+	run: (params?: Record<string, any>) => Promise<any>;
 }
 
-interface SqlRiteAsyncMethods {
-	[key: string]: (() => Promise<void>) | SqlRiteAsyncPreparedStatements;
+export interface SqlRiteSyncPreparedStatements {
+	all: (params?: Record<string, any>) => any[];
+	get: (params?: Record<string, any>) => any;
+	run: (params?: Record<string, any>) => any;
+}
+
+export class SqlRiteSync {
+	constructor(options?: SqlRiteOptions);
+	close(): void;
+	[key: string]: ((params?: Record<string, any>) => void) | SqlRiteSyncPreparedStatements | any;
 }
 
 export default class SqlRite {
 	constructor(options?: SqlRiteOptions);
-	async: SqlRiteAsyncMethods;
-	[key: string]: (() => void) | Statement | SqlRiteAsyncMethods | any;
+	close(): Promise<void>;
+	[key: string]: ((params?: Record<string, any>) => Promise<void>) | SqlRitePreparedStatements | any;
 }

@@ -22,8 +22,8 @@
 	"type": "module",
 	"main": "SqlRite.js",
 	"scripts": {
-		"lint": "npx @biomejs/biome check *.js",
-		"test": "node --experimental-test-coverage --inspect --test",
+		"lint": "npx @biomejs/biome check *.js test/*.js",
+		"test": "node --experimental-test-coverage --test test/test.js",
 		"debug": "node --experimental-test-coverage --inspect-brk --test",
 		"check": "npm run lint && npm run test"
 	}

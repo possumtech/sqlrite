@@ -1,95 +1,98 @@
-import fs from "node:fs";
-import { DatabaseSync } from "node:sqlite";
+import { Worker } from "node:worker_threads";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import SqlRiteSync from "./SqlRiteSync.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export { SqlRiteSync };
 
 export default class SqlRite {
+	#worker;
+	#id = 0;
+	#promises = new Map();
+	#ready;
+	#readyPromise;
+
 	constructor(options = {}) {
 		const defaults = {
 			path: ":memory:",
 			dir: "sql",
 		};
-
 		const merged = { ...defaults, ...options };
 
-		const db = new DatabaseSync(merged.path, merged);
-
-		this.close = () => db.close();
-
-		// allow multiple directories
-		if (!Array.isArray(merged.dir)) merged.dir = [merged.dir];
-		const files = merged.dir.flatMap((d) => this.getFiles(d));
-
-		const code = files.map((f) => fs.readFileSync(f, "utf8")).join("");
-
-		this.async = {};
-
-		const chunks =
-			/-- (?<chunk>(?<type>INIT|EXEC|PREP): (?<name>\w+)\n(?<sql>.*?))($|(?=-- (INIT|EXEC|PREP):))/gs;
-
-		const initChunks = [];
-		const execChunks = [];
-		const prepChunks = [];
-
-		for (const chunk of code.matchAll(chunks)) {
-			const { type } = chunk.groups;
-
-			if (type === "INIT") initChunks.push(chunk.groups);
-			if (type === "EXEC") execChunks.push(chunk.groups);
-			if (type === "PREP") prepChunks.push(chunk.groups);
-		}
-
-		initChunks.forEach((init) => {
-			db.exec(init.sql);
+		this.#worker = new Worker(path.join(__dirname, "SqlWorker.js"), {
+			workerData: { options: merged },
 		});
 
-		execChunks.forEach((exec) => {
-			this[exec.name] = () => db.exec(exec.sql);
-			this.async[exec.name] = async () => db.exec(exec.sql);
+		this.#readyPromise = new Promise((resolve) => {
+			this.#worker.on("message", (msg) => {
+				if (msg.type === "READY") {
+					this.#setupMethods(msg.names);
+					this.#ready = true;
+					resolve();
+				} else if (msg.id !== undefined) {
+					const { resolve, reject } = this.#promises.get(msg.id);
+					this.#promises.delete(msg.id);
+					if (msg.error) reject(new Error(msg.error));
+					else resolve(msg.result);
+				}
+			});
 		});
 
-		prepChunks.forEach((prep) => {
-			const stmt = db.prepare(prep.sql);
-			this[prep.name] = {};
-
-			this[prep.name].all = (params = {}) => stmt.all(this.doJsonify(params));
-			this[prep.name].get = (params = {}) => stmt.get(this.doJsonify(params));
-			this[prep.name].run = (params = {}) => stmt.run(this.doJsonify(params));
-
-			this.async[prep.name] = {};
-
-			this.async[prep.name].all = async (params = {}) => {
-				return stmt.all(this.doJsonify(params));
-			};
-
-			this.async[prep.name].get = async (params = {}) => {
-				return stmt.get(this.doJsonify(params));
-			};
-
-			this.async[prep.name].run = async (params = {}) => {
-				return stmt.run(this.doJsonify(params));
-			};
-		});
-	}
-
-	getFiles(dir) {
-		const files = [];
-
-		for (const item of fs.readdirSync(dir)) {
-			const path = `${dir}/${item}`;
-
-			if (fs.lstatSync(path).isDirectory()) files.push(...this.getFiles(path));
-			else if (item.endsWith(".sql")) files.push(path);
-		}
-
-		return files.sort();
-	}
-
-	doJsonify(params) {
-		for (const param in params) {
-			if (Array.isArray(params[param])) {
-				params[param] = JSON.stringify(params[param]);
+		// Fallback for methods not yet defined or dynamic ones
+		return new Proxy(this, {
+			get: (target, prop, receiver) => {
+				if (prop in target) {
+					const val = target[prop];
+					if (typeof val === "function") return val.bind(target);
+					return val;
+				}
+				if (typeof prop === "symbol" || prop === "then") {
+					return target[prop];
+				}
+				// Return a proxy that can handle .all(), .get(), .run() or direct calls
+				return new Proxy(() => {}, {
+					apply: (t, thisArg, args) => {
+						return target.#callWorker("EXEC", prop, null, args[0]);
+					},
+					get: (t, method) => {
+						if (["all", "get", "run"].includes(method)) {
+							return (params) => target.#callWorker(`PREP_${method.toUpperCase()}`, prop, null, params);
+						}
+					}
+				});
 			}
-		}
+		});
+	}
 
-		return params;
+	#setupMethods(names) {
+		for (const name of names.EXEC) {
+			this[name] = (params) => this.#callWorker("EXEC", name, null, params);
+		}
+		for (const name of names.PREP) {
+			this[name] = {
+				all: (params) => this.#callWorker("PREP_ALL", name, null, params),
+				get: (params) => this.#callWorker("PREP_GET", name, null, params),
+				run: (params) => this.#callWorker("PREP_RUN", name, null, params),
+			};
+		}
+	}
+
+	async #callWorker(type, name, sql, params) {
+		await this.#readyPromise;
+		return new Promise((resolve, reject) => {
+			const id = this.#id++;
+			this.#promises.set(id, { resolve, reject });
+			this.#worker.postMessage({ id, type, name, sql, params });
+		});
+	}
+
+	async exec(sql) {
+		return this.#callWorker("EXEC", null, sql, null);
+	}
+
+	async close() {
+		return this.#callWorker("CLOSE");
 	}
 }
