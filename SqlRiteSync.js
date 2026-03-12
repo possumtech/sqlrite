@@ -2,8 +2,9 @@ import { DatabaseSync } from "node:sqlite";
 import SqlRiteCore from "./SqlRiteCore.js";
 
 export default class SqlRiteSync {
-	#db;
+	#db = null;
 	#stmts = new Map();
+	#protected = new Set(["exec", "close", "constructor"]);
 
 	constructor(options = {}) {
 		const defaults = {
@@ -22,10 +23,12 @@ export default class SqlRiteSync {
 		}
 
 		for (const exec of chunks.EXEC) {
+			if (this.#protected.has(exec.name)) continue;
 			this[exec.name] = () => this.#db.exec(exec.sql);
 		}
 
 		for (const prep of chunks.PREP) {
+			if (this.#protected.has(prep.name)) continue;
 			const stmt = this.#db.prepare(prep.sql);
 			this.#stmts.set(prep.name, stmt);
 

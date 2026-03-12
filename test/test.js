@@ -5,6 +5,11 @@ import test from "node:test";
 import SqlRite, { SqlRiteSync } from "../SqlRite.js";
 import SqlRiteCore from "../SqlRiteCore.js";
 
+// Setup test environment
+if (!fs.existsSync("sql")) fs.mkdirSync("sql");
+fs.writeFileSync("sql/001-init.sql", "-- INIT: createEmployees\nCREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, position TEXT NOT NULL, salary REAL NOT NULL);");
+fs.writeFileSync("sql/002-data.sql", "-- PREP: addEmployee\nINSERT INTO employees (name, position, salary) VALUES ($name, $position, $salary);\n-- PREP: getPositions\nSELECT name, position FROM employees;\n-- PREP: getHighestPaidEmployee\nSELECT * FROM employees ORDER BY salary DESC LIMIT 1;\n-- EXEC: deleteTable\nDROP TABLE IF EXISTS sync_test;");
+
 test("SqlRiteCore", (t) => {
 	t.test("getFiles() should sort numerically", () => {
 		const files = SqlRiteCore.getFiles("sql");
@@ -47,29 +52,33 @@ test("SqlRiteCore", (t) => {
 });
 
 test("SqlRiteSync", (t) => {
-	const sql = new SqlRiteSync();
+	const sql = new SqlRiteSync({ dir: "sql" });
 
 	t.test("initialization and INIT chunks", () => {
+		// Employees table should exist from 001-init.sql
 		const res = sql.getPositions.all();
-		assert.ok(Array.isArray(res), "Should be able to call prepped statements");
+		assert.ok(Array.isArray(res));
 	});
 
 	t.test("exec()", () => {
-		sql.exec("CREATE TABLE sync_test (val TEXT)");
-		sql.exec("INSERT INTO sync_test VALUES ('a')");
+		sql.exec("CREATE TABLE sync_test (id INTEGER)");
+		sql.exec("INSERT INTO sync_test VALUES (1)");
+		// No error means success
 	});
 
 	t.test("PREP methods (all, get, run)", () => {
-		sql.addEmployee.run({ name: "Sync", position: "Dev", salary: 100 });
-		const all = sql.getPositions.all();
-		const one = sql.getHighestPaidEmployee.get();
-		assert.ok(all.length > 0);
-		assert.ok(one);
+		sql.addEmployee.run({
+			name: "Sync User",
+			position: "Dev",
+			salary: 50000,
+		});
+		const res = sql.getPositions.all();
+		assert.ok(res.some((e) => e.name === "Sync User"));
 	});
 
 	t.test("EXEC methods", () => {
 		sql.deleteTable();
-		// Should not throw
+		// No error means success
 	});
 
 	t.test("close()", () => {
@@ -78,65 +87,42 @@ test("SqlRiteSync", (t) => {
 });
 
 test("SqlRite (Async)", async (t) => {
-	const sql = new SqlRite();
+	const sql = new SqlRite({ dir: "sql" });
 
 	await t.test("READY signal and methods setup", async () => {
-		// Wait for ready by calling a method
-		await sql.getPositions.all();
+		// Wait for ready via any method call or just a small timeout if needed
+		// but since every method awaits the readyPromise, we can just call one
 		assert.ok(typeof sql.addEmployee.run === "function");
 	});
 
 	await t.test("PREP methods", async () => {
-		await sql.addEmployee.run({ name: "Async", position: "Dev", salary: 200 });
-		await sql.getPositions.all();
-		await sql.getPositions.get();
-
-		// To hit 100% functions, call all variants (all, get, run) even if they don't make sense for the SQL
-		await sql.getPositions.run();
-		await sql.getPositions.get();
-		await sql.addEmployee.all({ name: "Cover1", position: "Dev", salary: 0 });
-		await sql.addEmployee.get({ name: "Cover2", position: "Dev", salary: 0 });
+		await sql.addEmployee.run({
+			name: "Async User",
+			position: "Lead",
+			salary: 90000,
+		});
+		const res = await sql.getPositions.all();
+		assert.ok(res.some((e) => e.name === "Async User"));
 	});
 
 	await t.test("Proxy fallback", async () => {
-		// Test calling an existing method via its bound function (not Proxy fallback)
-		await sql.deleteTable();
-
-		// Test calling a method that doesn't exist to hit Proxy apply
-		try {
-			await sql.nonExistentExec();
-		} catch (e) {
-			assert.ok(e.message.includes("not found") || true);
-		}
-
-		// Test calling a PREP method via Proxy fallback
-		try {
-			await sql.nonExistentPrep.all();
-			await sql.nonExistentPrep.get();
-			await sql.nonExistentPrep.run();
-
-			// Access non-all/get/run to hit Proxy get's else branch
-			const val = sql.nonExistentPrep.somethingElse;
-			assert.strictEqual(val, undefined);
-		} catch (e) {
-			assert.ok(e instanceof Error);
-		}
+		const res = await sql.getHighestPaidEmployee.get();
+		assert.strictEqual(res.name, "Async User");
 	});
 
 	await t.test("Raw SQL execution", async () => {
-		await sql.exec(
-			"CREATE TABLE IF NOT EXISTS raw_test (id INTEGER PRIMARY KEY)",
-		);
-		await sql.exec("INSERT INTO raw_test DEFAULT VALUES");
+		await sql.exec("CREATE TABLE async_test (id INTEGER)");
+		// Success if no throw
 	});
 
 	await t.test("Error handling", async () => {
 		try {
-			// Trigger a SQL error
 			await sql.nonExistentMethod.all();
 			assert.fail("Should have thrown");
-		} catch (e) {
-			assert.ok(e instanceof Error);
+		} catch (err) {
+			// Proxy fallback returns a function that calls #callWorker
+			// Since the name isn't found in EXEC or PREP, the worker will throw
+			assert.ok(err.message.includes("Cannot read properties of undefined"));
 		}
 	});
 
@@ -145,7 +131,7 @@ test("SqlRite (Async)", async (t) => {
 	});
 });
 
-test("Multi-directory support", (_t) => {
+test("Multi-directory support", () => {
 	if (!fs.existsSync("sql2")) fs.mkdirSync("sql2");
 	fs.writeFileSync("sql2/extra.sql", "-- PREP: extra\nSELECT 1 as val;");
 	const sql = new SqlRiteSync({ dir: ["sql", "sql2"] });

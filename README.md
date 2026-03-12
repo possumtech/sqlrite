@@ -1,165 +1,139 @@
-# sqlrite
+# 🪨 SqlRite
 
-SQL Done Right
+[![npm version](https://img.shields.io/npm/v/@possumtech/sqlrite?color=brightgreen)](https://www.npmjs.com/package/@possumtech/sqlrite)
+[![license](https://img.shields.io/github/license/possumtech/sqlrite)](LICENSE)
+[![node version](https://img.shields.io/badge/node-%3E%3D25.0.0-blue)](https://nodejs.org)
 
-## About sqlrite
+**SQL Done Right.** A high-performance, opinionated, and LLM-ready wrapper for Node.js native SQLite.
 
-The sqlrite package is a modern node module that delivers an opinionated
-alternative to ORMs. It is a thin wrapper around the
-[native sqlite module](https://nodejs.org/api/sqlite.html), which
-enables one to separate SQL code from Javascript code.
+---
 
-## Opinions
+## 📖 About
 
-1. **SQL Supremacy**: Your application is data, and SQL is the best interface.
+SqlRite is a thin, zero-dependency wrapper around the [native Node.js `sqlite` module](https://nodejs.org/api/sqlite.html). It enforces a clean separation of concerns by treating SQL as a first-class citizen, enabling a development workflow that is faster, more secure, and optimized for modern AI coding assistants.
 
-2. **Standards**: Node is the standard for server-side web apps, and it now
-contains a native sqlite module. Sqlite is the standard for SQL.
+### Why SqlRite?
 
-3. **Simplicity**: It takes as much time to master an ORM as it would take to
-just master SQL, and with worse performance. For all but the most distributed,
-concurrent, and custom use cases, sqlite is the simple, correct choice.
+1.  **⚡ Zero-Config Prepared Statements**: Define SQL in `.sql` files; call them as native JS methods.
+2.  **🧵 True Non-Blocking I/O**: The default async model offloads all DB operations to a dedicated Worker Thread.
+3.  **📦 LLM-Ready Architecture**: By isolating SQL from JS boilerplate, you provide AI agents with a clean, high-signal "Source of Truth" for your data layer.
+4.  **🧩 Locality of Behavior**: Keep your SQL files right next to the JS logic that uses them.
+5.  **🚀 Modern Standards**: Built for Node 25+, ESM-native, and uses the latest `node:sqlite` primitives.
 
-4. **Security**: Inline SQL is insecure, unmaintainable, and error-prone.
+---
 
-5. **Speed**: By enforcing the use of prepared statements, sqlrite ensures that
-your queries are compiled and cached by the sqlite engine.
+## 🛠 Installation
 
-6. **Separation**: SQL code should be in separate SQL files rather than
-scattered throughout your JS codebase.
+```bash
+npm install @possumtech/sqlrite
+```
 
-7. **Size**: By relying on the native sqlite module, and nothing else, sqlrite
-won't bloat your project with unnecessary dependencies. This thing is *tiny*.
+---
 
-## Usage
+## 🚀 Quick Start
 
-**SQL**
+### 1. Define your SQL (`src/users.sql`)
 
-Add a `sql` folder to your project and include as many `.sql` files as you
-wish, with whatever folder structure you like. Sqlrite will automatically load
-them all.
+SqlRite uses simple metadata headers to turn SQL chunks into JS methods.
 
-| Syntax              | Name                   | Description            |
-|---------------------|------------------------|------------------------|
-| `-- INIT: txName`   | Executed Transaction   | Executed transaction   |
-| `-- EXEC: txName`   | Executable Transaction | Executable transaction |
-| `-- PREP: stmtName` | Prepared Statements    | Prepared statement     |
+```sql
+-- INIT: createUsers
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  meta TEXT
+);
 
-There are three types of "chunk" one can add to a `.sql` file:
+-- PREP: addUser
+INSERT INTO users (name, meta) VALUES ($name, $meta);
 
-1. **INIT**: A transaction that is executed when the module is instantiated.
-This is where you should create your tables, for example.
+-- PREP: getUserByName
+SELECT * FROM users WHERE name = $name;
+```
 
-2. **EXEC**: A transaction that can be executed at any time. For example,
-	 dropping a table. This is where you should put your transactions that are
-	 not prepared statements, like maintaining your database.
+### 2. Use it in Javascript
 
-3. **PREP**: A prepared statement that can be executed at any time. This is
-where you should put your queries. After declaring a prepared statement, you can
-then run it with either the `.all({})`, `.get({})` or `.run({})` methods, as per
-the native sqlite API.
+#### Asynchronous (Default - Recommended)
+Uses Worker Threads to keep your main event loop free.
 
-| Method     | Description                                           |
-|------------|-------------------------------------------------------|
-| `.all({})` | Returns all rows that match the query.                |
-| `.get({})` | Returns the first row that matches the query.         |
-| `.run({})` | Executes the query and returns the (optional) result. |
-
-### Synchronous/Asynchronous
-
-Sqlrite now provides both asynchronous and synchronous models. The default export is fully asynchronous, offloading database operations to a separate Worker Thread to ensure your main event loop remains unblocked.
-
-### Asynchronous (Default)
-
-The asynchronous model uses worker threads and returns Promises.
-
-```js
+```javascript
 import SqlRite from "@possumtech/sqlrite";
 
-const sql = new SqlRite();
+const sql = new SqlRite({ 
+  path: "data.db", 
+  dir: "src" 
+});
 
-// Prepped statements return Promises
-const positions = await sql.getPositions.all();
+// PREP chunks expose .all(), .get(), and .run()
+await sql.addUser.run({ 
+  name: "Alice", 
+  meta: JSON.stringify({ theme: "dark" }) 
+});
 
-// Executable transactions are also async
-await sql.deleteTable();
-
-// Raw SQL execution
-await sql.exec("CREATE TABLE test (id INTEGER)");
+const user = await sql.getUserByName.get({ name: "Alice" });
+console.log(user.name); // "Alice"
 
 await sql.close();
 ```
 
-### Synchronous
+#### Synchronous
+Ideal for CLI tools, migrations, or scripts.
 
-For CLI tools or scripts where blocking is acceptable or preferred, use `SqlRiteSync`.
-
-```js
+```javascript
 import { SqlRiteSync } from "@possumtech/sqlrite";
 
-const sql = new SqlRiteSync();
-
-const positions = sql.getPositions.all();
+const sql = new SqlRiteSync({ dir: ["src", "migrations"] });
+const users = sql.getUserByName.all({ name: "Alice" });
 sql.close();
 ```
 
-## Features
+---
 
-1. **Worker Threads**: The default async model runs the database in a separate thread, providing true non-blocking I/O.
-2. **Numerical Migrations**: SQL files are processed in a numerically linear order (e.g., `001-init.sql`, `002-data.sql`).
-3. **Robust Parser**: Improved SQL extraction that correctly handles complex files and metadata headers.
-4. **Enhanced JSON Support**: Automatically detects arrays and objects in parameters and converts them to JSON strings for SQLite's `json_each` and other JSON functions.
-5. **Zero-Config Prepared Statements**: Just define them in your `.sql` files with `-- PREP:` and they are automatically compiled and exposed as methods.
+## 🤖 LLM-Ready Architecture
 
-## SQL Syntax
+In the era of AI-assisted engineering, **Context is King**. 
 
-Add a `sql` folder to your project and include as many `.sql` files as you wish. Files are sorted numerically by their filename prefix.
+SqlRite's "SQL-First" approach is specifically designed to maximize the effectiveness of LLMs (like Gemini, Claude, and GPT):
 
-| Syntax              | Name                   | Description            |
-|---------------------|------------------------|------------------------|
-| `-- INIT: txName`   | Initial Transaction    | Executed once on init  |
-| `-- EXEC: txName`   | Executable Transaction | Exposes a method       |
-| `-- PREP: stmtName` | Prepared Statement     | Pre-compiled statement |
+*   **High Signal-to-Noise**: When you feed a `.sql` file to an LLM, it sees 100% schema and logic, 0% Javascript boilerplate. This prevents "context contamination" and hallucination.
+*   **Schema Awareness**: Agents can instantly "understand" your entire database contract by reading the isolated SQL files, making them significantly better at generating correct queries.
+*   **Clean Diffs**: AI-generated refactors of your data layer stay within `.sql` files, keeping your JS history clean and your logic easier to audit.
 
-**Example SQL File (`001-init.sql`)**
+---
 
-```sql
--- INIT: createEmployeeTable
-CREATE TABLE IF NOT EXISTS employees (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	name TEXT NOT NULL,
-	position TEXT NOT NULL,
-	salary REAL NOT NULL
-);
+## 💎 Features & Syntax
 
--- PREP: addEmployee
-INSERT INTO employees (name, position, salary)
-	VALUES ($name, $position, $salary);
+### Metadata Headers
 
--- PREP: getPositions
-SELECT name, position FROM employees;
-```
+| Syntax | Name | Behavior |
+| :--- | :--- | :--- |
+| `-- INIT: name` | **Initializer** | Runs once automatically when `SqlRite` is instantiated. |
+| `-- EXEC: name` | **Transaction** | Exposes a method `sql.name()` for one-off SQL execution. |
+| `-- PREP: name` | **Statement** | Compiles a Prepared Statement; exposes `.all()`, `.get()`, and `.run()`. |
 
-## Configuration
+### Locality & Multi-Directory Support
 
-```js
-import SqlRite from "@possumtech/sqlrite";
+You don't have to put all your SQL in one folder. SqlRite encourages placing SQL files exactly where they are needed:
 
+```javascript
 const sql = new SqlRite({
-	path: "database.sqlite", // Path to SQLite file (default: ":memory:")
-	dir: "sql",              // SQL directory (default: "sql")
+  dir: ["src/auth", "src/billing", "src/shared/sql"]
 });
 ```
 
-You will almost certainly wish to replace the `path` with a path to your
-database file. Otherwise, the database will be created in memory and lost when
-the process ends.
+Files are sorted **numerically by filename prefix** across all directories (e.g., `001-setup.sql` will always run before `002-seed.sql`), ensuring deterministic migrations.
 
-```js
-const sql = new SqlRite({ path: "path/to/your/database.sqlite3" });
-```
+---
 
-Additional arguments will be passed to the options object of the native sqlite
-module.
+## ⚙️ Configuration
 
-To close the database connection, call the `.close()` method:
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `path` | `string` | `":memory:"` | Path to the SQLite database file. |
+| `dir` | `string\|string[]` | `"sql"` | Directory or directories to scan for `.sql` files. |
+
+---
+
+## 📄 License
+
+MIT © [@wikitopian](https://github.com/wikitopian)

@@ -8,11 +8,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export { SqlRiteSync };
 
 export default class SqlRite {
-	#worker;
+	#worker = null;
 	#id = 0;
 	#promises = new Map();
-	#ready;
-	#readyPromise;
+	#readyPromise = Promise.resolve();
+	#protected = new Set(["exec", "close", "constructor"]);
 
 	constructor(options = {}) {
 		const defaults = {
@@ -29,19 +29,19 @@ export default class SqlRite {
 			this.#worker.on("message", (msg) => {
 				if (msg.type === "READY") {
 					this.#setupMethods(msg.names);
-					this.#ready = true;
 					resolve();
 				} else if (msg.id !== undefined) {
-					const { resolve, reject } = this.#promises.get(msg.id);
-					this.#promises.delete(msg.id);
-					if (msg.error) reject(new Error(msg.error));
-					else resolve(msg.result);
+					const promise = this.#promises.get(msg.id);
+					if (promise) {
+						this.#promises.delete(msg.id);
+						if (msg.error) promise.reject(new Error(msg.error));
+						else promise.resolve(msg.result);
+					}
 				}
 			});
 		});
 
 		// Fallback for methods not yet defined or dynamic ones
-		// biome-ignore lint/correctness/noConstructorReturn: Required for dynamic Proxy API
 		return new Proxy(this, {
 			get: (target, prop, _receiver) => {
 				if (prop in target) {
@@ -60,12 +60,7 @@ export default class SqlRite {
 					get: (_t, method) => {
 						if (["all", "get", "run"].includes(method)) {
 							return (params) =>
-								target.#callWorker(
-									`PREP_${method.toUpperCase()}`,
-									prop,
-									null,
-									params,
-								);
+								target.#callWorker(`PREP_${method.toUpperCase()}`, prop, null, params);
 						}
 					},
 				});
@@ -75,9 +70,11 @@ export default class SqlRite {
 
 	#setupMethods(names) {
 		for (const name of names.EXEC) {
+			if (this.#protected.has(name)) continue;
 			this[name] = (params) => this.#callWorker("EXEC", name, null, params);
 		}
 		for (const name of names.PREP) {
+			if (this.#protected.has(name)) continue;
 			this[name] = {
 				all: (params) => this.#callWorker("PREP_ALL", name, null, params),
 				get: (params) => this.#callWorker("PREP_GET", name, null, params),
