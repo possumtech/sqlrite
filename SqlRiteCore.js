@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 export default class SqlRiteCore {
-	static #CHUNK_REGEX = /^-- (INIT|EXEC|PREP): (\w+)/;
+	static #CHUNK_REGEX = /^--\s*(INIT|EXEC|PREP):\s*(\w+)/gim;
 
 	static getFiles(dir) {
 		const files = [];
@@ -21,24 +21,12 @@ export default class SqlRiteCore {
 	}
 
 	static #sortFiles(files) {
-		return [...files].sort((a, b) => {
-			const aBase = path.basename(a);
-			const bBase = path.basename(b);
-			const aMatch = aBase.match(/^(\d+)/);
-			const bMatch = bBase.match(/^(\d+)/);
-
-			if (aMatch && bMatch) {
-				const aNum = Number.parseInt(aMatch[1], 10);
-				const bNum = Number.parseInt(bMatch[1], 10);
-				if (aNum !== bNum) return aNum - bNum;
-			} else if (aMatch) {
-				return -1;
-			} else if (bMatch) {
-				return 1;
-			}
-
-			return a.localeCompare(b);
-		});
+		return [...files].sort((a, b) =>
+			path.basename(a).localeCompare(path.basename(b), undefined, {
+				numeric: true,
+				sensitivity: "base",
+			}),
+		);
 	}
 
 	static parseSql(files) {
@@ -46,37 +34,22 @@ export default class SqlRiteCore {
 
 		for (const file of files) {
 			const content = fs.readFileSync(file, "utf8");
-			SqlRiteCore.#processContent(content, chunks);
-		}
+			const matches = [...content.matchAll(SqlRiteCore.#CHUNK_REGEX)];
 
-		return SqlRiteCore.#trimChunks(chunks);
-	}
+			for (let i = 0; i < matches.length; i++) {
+				const match = matches[i];
+				const type = match[1].toUpperCase();
+				const name = match[2];
+				const start = match.index + match[0].length;
+				const end = matches[i + 1]?.index ?? content.length;
 
-	static #processContent(content, chunks) {
-		const lines = content.split(/\r?\n/);
-		let currentChunk = null;
-
-		for (const line of lines) {
-			const match = line.match(SqlRiteCore.#CHUNK_REGEX);
-			if (match) {
-				const [_, type, name] = match;
-				currentChunk = { type, name, sql: "" };
-				chunks[type].push(currentChunk);
-			} else if (currentChunk) {
-				currentChunk.sql += `${line}\n`;
+				const sql = content.slice(start, end).trim();
+				if (sql) {
+					chunks[type].push({ type, name, sql });
+				}
 			}
 		}
-	}
 
-	static #trimChunks(chunks) {
-		for (const [type, list] of Object.entries(chunks)) {
-			chunks[type] = list
-				.map((c) => ({
-					...c,
-					sql: c.sql.trim(),
-				}))
-				.filter((c) => c.sql.length > 0);
-		}
 		return chunks;
 	}
 
