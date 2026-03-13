@@ -19,6 +19,7 @@ SqlRite is a thin, zero-dependency wrapper around the [native Node.js `sqlite` m
 3.  **📦 LLM-Ready Architecture**: By isolating SQL from JS boilerplate, you provide AI agents with a clean, high-signal "Source of Truth" for your data layer.
 4.  **🧩 Locality of Behavior**: Keep your SQL files right next to the JS logic that uses them.
 5.  **🚀 Modern Standards**: Built for Node 25+, ESM-native, and uses the latest `node:sqlite` primitives.
+6.  **🛡️ Production-Ready Defaults**: Automatically enables WAL mode, Foreign Key enforcement, and DML Strictness.
 
 ---
 
@@ -34,7 +35,7 @@ npm install @possumtech/sqlrite
 
 ### 1. Define your SQL (`src/users.sql`)
 
-SqlRite uses simple metadata headers to turn SQL chunks into JS methods.
+SqlRite uses simple metadata headers to turn SQL chunks into JS methods. We recommend using `STRICT` tables for maximum type safety.
 
 ```sql
 -- INIT: createUsers
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   meta TEXT
-);
+) STRICT;
 
 -- PREP: addUser
 INSERT INTO users (name, meta) VALUES ($name, $meta);
@@ -65,13 +66,14 @@ const sql = new SqlRite({
 });
 
 // PREP chunks expose .all(), .get(), and .run()
+// Objects/Arrays are automatically stringified for you!
 await sql.addUser.run({ 
   name: "Alice", 
-  meta: JSON.stringify({ theme: "dark" }) 
+  meta: { theme: "dark", preferences: [1, 2, 3] } 
 });
 
 const user = await sql.getUserByName.get({ name: "Alice" });
-console.log(user.name); // "Alice"
+console.log(JSON.parse(user.meta).theme); // Manual parse required for output
 
 await sql.close();
 ```
@@ -102,6 +104,14 @@ SqlRite's "SQL-First" approach is specifically designed to maximize the effectiv
 ---
 
 ## 💎 Features & Syntax
+
+### Modern Defaults
+
+SqlRite automatically executes these PRAGMAs on every connection to ensure high performance and data integrity:
+
+*   **WAL Mode**: `PRAGMA journal_mode = WAL` enables concurrent readers and writers.
+*   **Foreign Keys**: `PRAGMA foreign_keys = ON` enforces relational constraints.
+*   **DML Strict Mode**: `PRAGMA dml_strict = ON` catches common SQL errors (like using double quotes for strings).
 
 ### Metadata Headers
 

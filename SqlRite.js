@@ -60,7 +60,12 @@ export default class SqlRite {
 					get: (_t, method) => {
 						if (["all", "get", "run"].includes(method)) {
 							return (params) =>
-								target.#callWorker(`PREP_${method.toUpperCase()}`, prop, null, params);
+								target.#callWorker(
+									`PREP_${method.toUpperCase()}`,
+									prop,
+									null,
+									params,
+								);
 						}
 					},
 				});

@@ -7,8 +7,14 @@ import SqlRiteCore from "../SqlRiteCore.js";
 
 // Setup test environment
 if (!fs.existsSync("sql")) fs.mkdirSync("sql");
-fs.writeFileSync("sql/001-init.sql", "-- INIT: createEmployees\nCREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, position TEXT NOT NULL, salary REAL NOT NULL);");
-fs.writeFileSync("sql/002-data.sql", "-- PREP: addEmployee\nINSERT INTO employees (name, position, salary) VALUES ($name, $position, $salary);\n-- PREP: getPositions\nSELECT name, position FROM employees;\n-- PREP: getHighestPaidEmployee\nSELECT * FROM employees ORDER BY salary DESC LIMIT 1;\n-- EXEC: deleteTable\nDROP TABLE IF EXISTS sync_test;");
+fs.writeFileSync(
+	"sql/001-init.sql",
+	"-- INIT: createEmployees\nCREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, position TEXT NOT NULL, salary REAL NOT NULL);",
+);
+fs.writeFileSync(
+	"sql/002-data.sql",
+	"-- PREP: addEmployee\nINSERT INTO employees (name, position, salary) VALUES ($name, $position, $salary);\n-- PREP: getPositions\nSELECT name, position FROM employees;\n-- PREP: getHighestPaidEmployee\nSELECT * FROM employees ORDER BY salary DESC LIMIT 1;\n-- EXEC: deleteTable\nDROP TABLE IF EXISTS sync_test;",
+);
 
 test("SqlRiteCore", (t) => {
 	t.test("getFiles() should sort numerically", () => {

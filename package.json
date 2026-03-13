@@ -1,6 +1,6 @@
 {
 	"name": "@possumtech/sqlrite",
-	"version": "0.2.4",
+	"version": "1.0.2",
 	"description": "SQL Done Right",
 	"keywords": [
 		"node",
@@ -21,10 +21,17 @@
 	"author": "@wikitopian",
 	"type": "module",
 	"main": "SqlRite.js",
+	"engines": {
+		"node": ">=25.0.0",
+		"npm": ">=11.1.0"
+	},
 	"scripts": {
-		"lint": "npx @biomejs/biome check *.js test/*.js",
+		"lint": "biome check .",
 		"test": "node --experimental-test-coverage --test test/test.js",
 		"debug": "node --experimental-test-coverage --inspect-brk --test",
-		"check": "npm run lint && npm run test"
+		"check": "npm run lint && npm test"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.6"
 	}
 }

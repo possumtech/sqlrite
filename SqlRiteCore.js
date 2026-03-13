@@ -87,7 +87,9 @@ export default class SqlRiteCore {
 		for (const [key, value] of Object.entries(result)) {
 			if (
 				Array.isArray(value) ||
-				(value !== null && typeof value === "object" && value.constructor?.name === "Object")
+				(value !== null &&
+					typeof value === "object" &&
+					value.constructor?.name === "Object")
 			) {
 				result[key] = JSON.stringify(value);
 			}

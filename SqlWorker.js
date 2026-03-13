@@ -4,6 +4,13 @@ import SqlRiteCore from "./SqlRiteCore.js";
 
 const { options } = workerData;
 const db = new DatabaseSync(options.path, options);
+
+// Performance and Safety Defaults
+db.exec("PRAGMA journal_mode = WAL;");
+db.exec("PRAGMA synchronous = NORMAL;");
+db.exec("PRAGMA foreign_keys = ON;");
+db.exec("PRAGMA dml_strict = ON;");
+
 const stmts = new Map();
 
 // Initialize
