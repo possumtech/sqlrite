@@ -25,7 +25,7 @@ export default class SqlRite {
 			workerData: { options: merged },
 		});
 
-		this.#readyPromise = new Promise((resolve) => {
+		this.#readyPromise = new Promise((resolve, reject) => {
 			this.#worker.on("message", (msg) => {
 				if (msg.type === "READY") {
 					this.#setupMethods(msg.names);
@@ -37,6 +37,16 @@ export default class SqlRite {
 						if (msg.error) promise.reject(new Error(msg.error));
 						else promise.resolve(msg.result);
 					}
+				}
+			});
+
+			this.#worker.on("error", (err) => {
+				reject(err);
+			});
+
+			this.#worker.on("exit", (code) => {
+				if (code !== 0) {
+					reject(new Error(`Worker stopped with exit code ${code}`));
 				}
 			});
 		});

@@ -27,6 +27,15 @@ for (const prep of chunks.PREP) {
 	stmts.set(prep.name, stmt);
 }
 
+// Signal ready
+parentPort.postMessage({
+	type: "READY",
+	names: {
+		EXEC: chunks.EXEC.map((e) => e.name),
+		PREP: chunks.PREP.map((p) => p.name),
+	},
+});
+
 parentPort.on("message", (msg) => {
 	const { id, type, name, sql, params } = msg;
 
@@ -56,13 +65,4 @@ parentPort.on("message", (msg) => {
 	} catch (error) {
 		parentPort.postMessage({ id, error: error.message });
 	}
-});
-
-// Signal ready
-parentPort.postMessage({
-	type: "READY",
-	names: {
-		EXEC: chunks.EXEC.map((e) => e.name),
-		PREP: chunks.PREP.map((p) => p.name),
-	},
 });
