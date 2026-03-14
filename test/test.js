@@ -91,13 +91,21 @@ describe("SqlRiteSync", () => {
 });
 
 describe("SqlRite (Async)", () => {
-	const sql = new SqlRite({ dir: "sql" });
+	test("Should throw if initialized via new SqlRite()", () => {
+		assert.throws(
+			() => new SqlRite(),
+			/SqlRite must be initialized using SqlRite.open/,
+		);
+	});
 
-	test("READY signal and methods setup", async () => {
+	test("READY signal and methods setup (via open)", async () => {
+		const sql = await SqlRite.open({ dir: "sql" });
 		assert.strictEqual(typeof sql.addEmployee.run, "function");
+		await sql.close();
 	});
 
 	test("PREP methods", async () => {
+		const sql = await SqlRite.open({ dir: "sql" });
 		await sql.addEmployee.run({
 			name: "Async User",
 			position: "Lead",
@@ -105,25 +113,17 @@ describe("SqlRite (Async)", () => {
 		});
 		const res = await sql.getPositions.all();
 		assert.ok(res.some((e) => e.name === "Async User"));
-	});
-
-	test("Proxy fallback", async () => {
-		const res = await sql.getHighestPaidEmployee.get();
-		assert.strictEqual(res.name, "Async User");
+		await sql.close();
 	});
 
 	test("Raw SQL execution", async () => {
+		const sql = await SqlRite.open({ dir: "sql" });
 		await sql.exec("CREATE TABLE async_test (id INTEGER)");
-	});
-
-	test("Error handling", async () => {
-		await assert.rejects(
-			async () => await sql.nonExistentMethod.all(),
-			/Cannot read properties of undefined/,
-		);
+		await sql.close();
 	});
 
 	test("close()", async () => {
+		const sql = await SqlRite.open({ dir: "sql" });
 		await sql.close();
 	});
 });

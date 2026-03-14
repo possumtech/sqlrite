@@ -4,6 +4,7 @@ import { Worker } from "node:worker_threads";
 import SqlRiteSync from "./SqlRiteSync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const INTERNAL = Symbol("SqlRiteInternal");
 
 export { SqlRiteSync };
 
@@ -11,10 +12,16 @@ export default class SqlRite {
 	#worker = null;
 	#id = 0;
 	#promises = new Map();
-	#readyPromise = Promise.resolve();
-	#protected = new Set(["exec", "close", "constructor"]);
+	#readyPromise = null;
+	#protected = new Set(["exec", "close", "constructor", "ready"]);
 
-	constructor(options = {}) {
+	constructor(options = {}, token) {
+		if (token !== INTERNAL) {
+			throw new Error(
+				"SqlRite must be initialized using SqlRite.open(options)",
+			);
+		}
+
 		const defaults = {
 			path: ":memory:",
 			dir: "sql",
@@ -29,7 +36,7 @@ export default class SqlRite {
 			this.#worker.on("message", (msg) => {
 				if (msg.type === "READY") {
 					this.#setupMethods(msg.names);
-					resolve();
+					resolve(this);
 				} else if (msg.id !== undefined) {
 					const promise = this.#promises.get(msg.id);
 					if (promise) {
@@ -40,47 +47,28 @@ export default class SqlRite {
 				}
 			});
 
-			this.#worker.on("error", (err) => {
-				reject(err);
-			});
-
+			this.#worker.on("error", (err) => reject(err));
 			this.#worker.on("exit", (code) => {
 				if (code !== 0) {
 					reject(new Error(`Worker stopped with exit code ${code}`));
 				}
 			});
 		});
+	}
 
-		// Fallback for methods not yet defined or dynamic ones
-		return new Proxy(this, {
-			get: (target, prop, _receiver) => {
-				if (prop in target) {
-					const val = target[prop];
-					if (typeof val === "function") return val.bind(target);
-					return val;
-				}
-				if (typeof prop === "symbol" || prop === "then") {
-					return target[prop];
-				}
-				// Return a proxy that can handle .all(), .get(), .run() or direct calls
-				return new Proxy(() => {}, {
-					apply: (_t, _thisArg, args) => {
-						return target.#callWorker("EXEC", prop, null, args[0]);
-					},
-					get: (_t, method) => {
-						if (["all", "get", "run"].includes(method)) {
-							return (params) =>
-								target.#callWorker(
-									`PREP_${method.toUpperCase()}`,
-									prop,
-									null,
-									params,
-								);
-						}
-					},
-				});
-			},
-		});
+	/**
+	 * Opens a new SqlRite instance and waits for it to be fully initialized.
+	 * @param {Object} options
+	 * @returns {Promise<SqlRite>}
+	 */
+	static async open(options) {
+		const instance = new SqlRite(options, INTERNAL);
+		await instance.ready();
+		return instance;
+	}
+
+	ready() {
+		return this.#readyPromise;
 	}
 
 	#setupMethods(names) {
@@ -112,6 +100,7 @@ export default class SqlRite {
 	}
 
 	async close() {
+		await this.#readyPromise.catch(() => {});
 		return this.#callWorker("CLOSE");
 	}
 }

@@ -15,21 +15,14 @@ describe("SqlRite Initialization Error Handling", () => {
 		fs.rmSync("sql_init_error", { recursive: true, force: true });
 	});
 
-	test("should reject readyPromise on initialization error", async () => {
-		const db = new SqlRite({
-			path: ":memory:",
-			dir: "sql_init_error",
-		});
-
+	test("should reject readyPromise on initialization error (via open)", async () => {
 		await assert.rejects(
-			async () => await db.exec("SELECT 1"),
+			async () =>
+				await SqlRite.open({
+					path: ":memory:",
+					dir: "sql_init_error",
+				}),
 			/no such table: non_existent_table/,
 		);
-
-		try {
-			await db.close();
-		} catch (_e) {
-			// Ignore error during close
-		}
 	});
 });
