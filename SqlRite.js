@@ -13,7 +13,7 @@ export default class SqlRite {
 	#id = 0;
 	#promises = new Map();
 	#readyPromise = null;
-	#protected = new Set(["exec", "close", "constructor", "ready"]);
+	#protected = new Set(["close", "constructor", "ready"]);
 
 	constructor(options = {}, token) {
 		if (token !== INTERNAL) {
@@ -93,10 +93,6 @@ export default class SqlRite {
 			this.#promises.set(id, { resolve, reject });
 			this.#worker.postMessage({ id, type, name, sql, params });
 		});
-	}
-
-	async exec(sql) {
-		return this.#callWorker("EXEC", null, sql, null);
 	}
 
 	async close() {

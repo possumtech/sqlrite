@@ -45,8 +45,6 @@ parentPort.on("message", (msg) => {
 			const chunk = chunks.EXEC.find((e) => e.name === name);
 			if (chunk) {
 				db.exec(chunk.sql);
-			} else if (sql) {
-				db.exec(sql);
 			}
 			result = null;
 		} else if (type === "PREP_ALL") {

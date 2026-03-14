@@ -25,7 +25,9 @@ export class SqlRiteSync {
 }
 
 export default class SqlRite {
-	constructor(options?: SqlRiteOptions);
+	private constructor(options?: SqlRiteOptions, token?: symbol);
+	static open(options?: SqlRiteOptions): Promise<SqlRite>;
+	ready(): Promise<SqlRite>;
 	close(): Promise<void>;
 	[key: string]:
 		| ((params?: Record<string, any>) => Promise<void>)

@@ -4,7 +4,7 @@ import SqlRiteCore from "./SqlRiteCore.js";
 export default class SqlRiteSync {
 	#db = null;
 	#stmts = new Map();
-	#protected = new Set(["exec", "close", "constructor"]);
+	#protected = new Set(["close", "constructor"]);
 
 	constructor(options = {}) {
 		const defaults = {
@@ -44,10 +44,6 @@ export default class SqlRiteSync {
 				run: (params = {}) => stmt.run(SqlRiteCore.jsonify(params)),
 			};
 		}
-	}
-
-	exec(sql) {
-		this.#db.exec(sql);
 	}
 
 	close() {

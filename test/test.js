@@ -9,7 +9,10 @@ import SqlRiteCore from "../SqlRiteCore.js";
 if (!fs.existsSync("sql")) fs.mkdirSync("sql");
 fs.writeFileSync(
 	"sql/001-init.sql",
-	"-- INIT: createEmployees\nCREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, position TEXT NOT NULL, salary REAL NOT NULL);",
+	"-- INIT: createEmployees\nCREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, position TEXT NOT NULL, salary REAL NOT NULL);\n" +
+		"-- EXEC: createSyncTest\nCREATE TABLE sync_test (id INTEGER);\n" +
+		"-- EXEC: insertSyncTest\nINSERT INTO sync_test VALUES (1);\n" +
+		"-- EXEC: createAsyncTest\nCREATE TABLE async_test (id INTEGER);",
 );
 fs.writeFileSync(
 	"sql/002-data.sql",
@@ -66,9 +69,10 @@ describe("SqlRiteSync", () => {
 		assert.ok(Array.isArray(res));
 	});
 
-	test("exec()", () => {
-		sql.exec("CREATE TABLE sync_test (id INTEGER)");
-		sql.exec("INSERT INTO sync_test VALUES (1)");
+	test("EXEC methods", () => {
+		sql.createSyncTest();
+		sql.insertSyncTest();
+		sql.deleteTable();
 	});
 
 	test("PREP methods (all, get, run)", () => {
@@ -79,10 +83,6 @@ describe("SqlRiteSync", () => {
 		});
 		const res = sql.getPositions.all();
 		assert.ok(res.some((e) => e.name === "Sync User"));
-	});
-
-	test("EXEC methods", () => {
-		sql.deleteTable();
 	});
 
 	test("close()", () => {
@@ -116,9 +116,9 @@ describe("SqlRite (Async)", () => {
 		await sql.close();
 	});
 
-	test("Raw SQL execution", async () => {
+	test("EXEC methods", async () => {
 		const sql = await SqlRite.open({ dir: "sql" });
-		await sql.exec("CREATE TABLE async_test (id INTEGER)");
+		await sql.createAsyncTest();
 		await sql.close();
 	});
 

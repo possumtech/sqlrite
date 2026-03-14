@@ -1,6 +1,6 @@
 {
 	"name": "@possumtech/sqlrite",
-	"version": "1.1.1",
+	"version": "2.0.2",
 	"description": "SQL Done Right",
 	"keywords": [
 		"node",
