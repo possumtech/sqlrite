@@ -37,7 +37,7 @@ parentPort.postMessage({
 });
 
 parentPort.on("message", (msg) => {
-	const { id, type, name, sql, params } = msg;
+	const { id, type, name, params } = msg;
 
 	try {
 		let result;

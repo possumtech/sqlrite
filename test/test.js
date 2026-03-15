@@ -10,13 +10,16 @@ if (!fs.existsSync("sql")) fs.mkdirSync("sql");
 fs.writeFileSync(
 	"sql/001-init.sql",
 	"-- INIT: createEmployees\nCREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, position TEXT NOT NULL, salary REAL NOT NULL);\n" +
+		"-- INIT: createEquipment\nCREATE TABLE equipment (id INTEGER PRIMARY KEY, employee_id INTEGER, name TEXT, FOREIGN KEY(employee_id) REFERENCES employees(id));\n" +
 		"-- EXEC: createSyncTest\nCREATE TABLE sync_test (id INTEGER);\n" +
 		"-- EXEC: insertSyncTest\nINSERT INTO sync_test VALUES (1);\n" +
 		"-- EXEC: createAsyncTest\nCREATE TABLE async_test (id INTEGER);",
 );
 fs.writeFileSync(
 	"sql/002-data.sql",
-	"-- PREP: addEmployee\nINSERT INTO employees (name, position, salary) VALUES ($name, $position, $salary);\n-- PREP: getPositions\nSELECT name, position FROM employees;\n-- PREP: getHighestPaidEmployee\nSELECT * FROM employees ORDER BY salary DESC LIMIT 1;\n-- EXEC: deleteTable\nDROP TABLE IF EXISTS sync_test;",
+	"-- PREP: addEmployee\nINSERT INTO employees (name, position, salary) VALUES ($name, $position, $salary);\n" +
+		"-- PREP: addEquipment\nINSERT INTO equipment (employee_id, name) VALUES ($employee_id, $name);\n" +
+		"-- PREP: getPositions\nSELECT name, position FROM employees;\n-- PREP: getHighestPaidEmployee\nSELECT * FROM employees ORDER BY salary DESC LIMIT 1;\n-- EXEC: deleteTable\nDROP TABLE IF EXISTS sync_test;",
 );
 
 after(() => {
@@ -69,6 +72,13 @@ describe("SqlRiteSync", () => {
 		assert.ok(Array.isArray(res));
 	});
 
+	test("enforces foreign key constraints", () => {
+		assert.throws(
+			() => sql.addEquipment.run({ employee_id: 999, name: "Laptop" }),
+			/FOREIGN KEY constraint failed/,
+		);
+	});
+
 	test("EXEC methods", () => {
 		sql.createSyncTest();
 		sql.insertSyncTest();
@@ -96,6 +106,16 @@ describe("SqlRite (Async)", () => {
 			() => new SqlRite(),
 			/SqlRite must be initialized using SqlRite.open/,
 		);
+	});
+
+	test("enforces foreign key constraints", async () => {
+		const sql = await SqlRite.open({ dir: "sql" });
+		await assert.rejects(
+			async () =>
+				await sql.addEquipment.run({ employee_id: 999, name: "Laptop" }),
+			/FOREIGN KEY constraint failed/,
+		);
+		await sql.close();
 	});
 
 	test("READY signal and methods setup (via open)", async () => {
