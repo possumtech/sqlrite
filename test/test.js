@@ -62,6 +62,15 @@ describe("SqlRiteCore", () => {
 		assert.strictEqual(output.nil, null);
 		assert.deepStrictEqual(SqlRiteCore.jsonify(null), {});
 	});
+
+	test("jsonify() strips SQL prefixes from keys", () => {
+		const input = { "$name": "val1", ":age": 20, "@id": 1 };
+		const output = SqlRiteCore.jsonify(input);
+		assert.strictEqual(output.name, "val1");
+		assert.strictEqual(output.age, 20);
+		assert.strictEqual(output.id, 1);
+		assert.ok(!("$name" in output));
+	});
 });
 
 describe("SqlRiteSync", () => {

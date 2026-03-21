@@ -55,16 +55,19 @@ export default class SqlRiteCore {
 
 	static jsonify(params) {
 		if (!params) return {};
-		const result = { ...params };
+		const result = {};
 
-		for (const [key, value] of Object.entries(result)) {
+		for (const [key, value] of Object.entries(params)) {
+			const cleanKey = key.replace(/^[$:@]/, "");
 			if (
 				Array.isArray(value) ||
 				(value !== null &&
 					typeof value === "object" &&
 					value.constructor?.name === "Object")
 			) {
-				result[key] = JSON.stringify(value);
+				result[cleanKey] = JSON.stringify(value);
+			} else {
+				result[cleanKey] = value;
 			}
 		}
 		return result;
