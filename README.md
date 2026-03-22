@@ -60,12 +60,13 @@ Uses Worker Threads to keep your main event loop free.
 ```javascript
 import SqlRite from "@possumtech/sqlrite";
 
-const sql = new SqlRite({ 
+const sql = await SqlRite.open({ 
   path: "data.db", 
   dir: "src" 
 });
 
 // PREP chunks expose .all(), .get(), and .run()
+// Named parameters are prefix-agnostic in JS (e.g., $name -> name)
 // Objects/Arrays are automatically stringified for you!
 await sql.addUser.run({ 
   name: "Alice", 
@@ -77,6 +78,7 @@ console.log(JSON.parse(user.meta).theme); // Manual parse required for output
 
 await sql.close();
 ```
+
 
 #### Synchronous
 Ideal for CLI tools, migrations, or scripts.
@@ -91,15 +93,59 @@ sql.close();
 
 ---
 
+## 🏗️ Migrations & Schema Management
+
+SqlRite provides a production-grade migration workflow built directly into the initialization process. It eliminates the need for external migration tools by leveraging deterministic file sorting and idempotent SQL.
+
+### 1. Idempotent Schema (`-- INIT`)
+Blocks tagged with `-- INIT` are executed automatically when the database is opened. Use `IF NOT EXISTS` to ensure these operations are safe to run repeatedly.
+
+### 2. Deterministic Execution Order
+SqlRite recursively scans your directories and sorts all `.sql` files **numerically by their basename prefix** (e.g., `001-setup.sql` runs before `002-feature.sql`). This ensures your schema is built in the exact order you intended, across all provided directories.
+
+### 3. Multi-Directory "Overlay"
+You can keep your core migrations in one folder and feature-specific SQL right next to your application logic:
+
+```javascript
+const sql = await SqlRite.open({
+  dir: [
+    "migrations",      // Global schema (001-base.sql, 002-auth.sql)
+    "src/users",       // Local logic (003-users-view.sql, users.sql)
+    "src/billing"      // Local logic (billing.sql)
+  ]
+});
+```
+
+SqlRite merges these folders into a single, sorted execution plan, allowing for both centralized management and Locality of Behavior.
+
+---
+
+## ⚡ Features & Syntax
+
+### Prefix-Agnostic Interface
+While SQL requires prefixes (`$`, `:`, or `@`) to identify parameters, SqlRite abstracts this away for the JavaScript consumer. You can pass clean object keys, and the library handles the mapping automatically.
+
+### 🛡️ Type Generation (Codegen)
+SqlRite includes a built-in codegen tool to provide precise TypeScript definitions for your dynamically generated methods.
+
+```bash
+# Generate SqlRite.d.ts from your SQL files
+npm run build:types
+```
+
+This enables full LSP support (autocomplete and parameter hints) in your IDE, even for runtime-generated objects.
+
+---
+
 ## 🤖 LLM-Ready Architecture
 
 In the era of AI-assisted engineering, **Context is King**. 
 
-SqlRite's "SQL-First" approach is specifically designed to maximize the effectiveness of LLMs (like Gemini, Claude, and GPT):
+SqlRite's "SQL-First" approach is specifically designed to maximize the effectiveness of LLMs:
 
-*   **High Signal-to-Noise**: When you feed a `.sql` file to an LLM, it sees 100% schema and logic, 0% Javascript boilerplate. This prevents "context contamination" and hallucination.
-*   **Schema Awareness**: Agents can instantly "understand" your entire database contract by reading the isolated SQL files, making them significantly better at generating correct queries.
-*   **Clean Diffs**: AI-generated refactors of your data layer stay within `.sql` files, keeping your JS history clean and your logic easier to audit.
+*   **High Signal-to-Noise**: When you feed a `.sql` file to an LLM, it sees 100% schema and logic, 0% Javascript boilerplate.
+*   **LLM Reference**: See [LLMS.md](./LLMS.md) for a high-signal "contract" that AI agents can use to understand and implement your data layer.
+*   **Schema Awareness**: Agents can instantly "understand" your entire database contract by reading isolated SQL files.
 
 ---
 

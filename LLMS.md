@@ -45,8 +45,19 @@ Methods defined via `-- PREP` are objects with three execution modes:
   WHERE ($filter IS NULL OR category = $filter)
   ```
 
-## 5. Typical Workflow for Agents
+## 5. Type Safety & LSP Support
+SqlRite supports automatic TypeScript generation to provide LSPs and LLMs with precise method signatures.
+
+### Codegen Workflow
+1. **Define SQL**: Add blocks to your `.sql` files.
+2. **Generate Types**: Run `npm run build:types`.
+3. **Benefit**: Get autocomplete, type checking, and parameter hints in your IDE.
+
+This ensures that the dynamically generated methods are "visible" to static analysis tools, significantly reducing errors in implementation.
+
+## 6. Typical Workflow for Agents
 1. **Understand State**: Read schema definitions in files containing `-- INIT`.
 2. **Implement Logic**: Create/edit a `.sql` file with a `-- PREP: <name>` or `-- EXEC: <name>` tag.
-3. **Execute**: Call the method in JS: `await db.<name>.<mode>({ ... })` for PREP or `await db.<name>({ ... })` for EXEC.
-4. **Standardize**: Ensure SQL is clean and follows project conventions.
+3. **Sync Types**: Run `npm run build:types` to update the library's type definitions.
+4. **Execute**: Call the method in JS: `await db.<name>.<mode>({ ... })`.
+5. **Standardize**: Ensure SQL is clean and follows project conventions.
