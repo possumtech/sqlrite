@@ -15,9 +15,10 @@ SqlRite scans `.sql` files for specific markers. Files are sorted numerically by
 - **Purpose**: Idempotent DDL (e.g., `CREATE TABLE IF NOT EXISTS`).
 - **Constraint**: Do not use parameters.
 
-### `-- EXEC: <method_name>` (Transactions/Commands)
-- **Execution**: Maps to `db.<method_name>(params)`.
-- **Purpose**: One-off SQL execution (e.g., migrations, complex `UPDATE` without return values).
+### `-- EXEC: <method_name>` (Raw Commands)
+- **Execution**: Maps to `db.<method_name>()`.
+- **Purpose**: Non-parameterized SQL execution (e.g., DDL, migrations, `PRAGMA` changes).
+- **Constraint**: Does not accept parameters. Use `-- PREP` with `.run()` for parameterized writes.
 
 ### `-- PREP: <method_name>` (Application Logic)
 - **Execution**: Maps to `db.<method_name>`.
