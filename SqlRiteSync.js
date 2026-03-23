@@ -14,15 +14,8 @@ export default class SqlRiteSync {
 		const merged = { ...defaults, ...options };
 		this.#db = new DatabaseSync(merged.path, merged);
 
-		// Performance and Safety Defaults
-		this.#db.exec("PRAGMA journal_mode = WAL;");
-		this.#db.exec("PRAGMA synchronous = NORMAL;");
-		this.#db.exec("PRAGMA foreign_keys = ON;");
-		this.#db.exec("PRAGMA dml_strict = ON;");
-
-		const dirs = Array.isArray(merged.dir) ? merged.dir : [merged.dir];
-		const files = dirs.flatMap((d) => SqlRiteCore.getFiles(d));
-		const chunks = SqlRiteCore.parseSql(files);
+		SqlRiteCore.initDb(this.#db);
+		const chunks = SqlRiteCore.loadChunks(merged);
 
 		for (const init of chunks.INIT) {
 			this.#db.exec(init.sql);

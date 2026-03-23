@@ -5,21 +5,19 @@ import SqlRiteCore from "./SqlRiteCore.js";
 const { options } = workerData;
 const db = new DatabaseSync(options.path, options);
 
-// Performance and Safety Defaults
-db.exec("PRAGMA journal_mode = WAL;");
-db.exec("PRAGMA synchronous = NORMAL;");
-db.exec("PRAGMA foreign_keys = ON;");
-db.exec("PRAGMA dml_strict = ON;");
+SqlRiteCore.initDb(db);
 
 const stmts = new Map();
+const execs = new Map();
 
-// Initialize
-const dirs = Array.isArray(options.dir) ? options.dir : [options.dir];
-const files = dirs.flatMap((d) => SqlRiteCore.getFiles(d));
-const chunks = SqlRiteCore.parseSql(files);
+const chunks = SqlRiteCore.loadChunks(options);
 
 for (const init of chunks.INIT) {
 	db.exec(init.sql);
+}
+
+for (const exec of chunks.EXEC) {
+	execs.set(exec.name, exec.sql);
 }
 
 for (const prep of chunks.PREP) {
@@ -42,10 +40,8 @@ parentPort.on("message", (msg) => {
 	try {
 		let result;
 		if (type === "EXEC") {
-			const chunk = chunks.EXEC.find((e) => e.name === name);
-			if (chunk) {
-				db.exec(chunk.sql);
-			}
+			const sql = execs.get(name);
+			if (sql) db.exec(sql);
 			result = null;
 		} else if (type === "PREP_ALL") {
 			result = stmts.get(name).all(SqlRiteCore.jsonify(params));

@@ -13,13 +13,12 @@ export default class SqlRite {
 	#id = 0;
 	#promises = new Map();
 	#readyPromise = null;
+	#closed = false;
 	#protected = new Set(["close", "constructor", "ready"]);
 
 	constructor(options = {}, token) {
 		if (token !== INTERNAL) {
-			throw new Error(
-				"SqlRite must be initialized using SqlRite.open(options)",
-			);
+			throw new Error("SqlRite must be initialized using SqlRite.open(options)");
 		}
 
 		const defaults = {
@@ -33,24 +32,23 @@ export default class SqlRite {
 		});
 
 		this.#readyPromise = new Promise((resolve, reject) => {
-			this.#worker.on("message", (msg) => {
+			this.#worker.once("message", (msg) => {
 				if (msg.type === "READY") {
 					this.#setupMethods(msg.names);
+					this.#worker.on("message", (msg) => this.#handleMessage(msg));
 					resolve(this);
-				} else if (msg.id !== undefined) {
-					const promise = this.#promises.get(msg.id);
-					if (promise) {
-						this.#promises.delete(msg.id);
-						if (msg.error) promise.reject(new Error(msg.error));
-						else promise.resolve(msg.result);
-					}
 				}
 			});
 
-			this.#worker.on("error", (err) => reject(err));
+			this.#worker.on("error", (err) => {
+				this.#rejectAll(err);
+				reject(err);
+			});
 			this.#worker.on("exit", (code) => {
 				if (code !== 0) {
-					reject(new Error(`Worker stopped with exit code ${code}`));
+					const err = new Error(`Worker stopped with exit code ${code}`);
+					this.#rejectAll(err);
+					reject(err);
 				}
 			});
 		});
@@ -71,32 +69,56 @@ export default class SqlRite {
 		return this.#readyPromise;
 	}
 
+	#handleMessage(msg) {
+		if (msg.id === undefined) return;
+		const promise = this.#promises.get(msg.id);
+		if (!promise) return;
+		this.#promises.delete(msg.id);
+		if (msg.error) promise.reject(new Error(msg.error));
+		else promise.resolve(msg.result);
+	}
+
+	#rejectAll(err) {
+		for (const [, promise] of this.#promises) {
+			promise.reject(err);
+		}
+		this.#promises.clear();
+		this.#closed = true;
+	}
+
 	#setupMethods(names) {
 		for (const name of names.EXEC) {
 			if (this.#protected.has(name)) continue;
-			this[name] = (params) => this.#callWorker("EXEC", name, null, params);
+			this[name] = () => this.#callWorker("EXEC", name);
 		}
 		for (const name of names.PREP) {
 			if (this.#protected.has(name)) continue;
 			this[name] = {
-				all: (params) => this.#callWorker("PREP_ALL", name, null, params),
-				get: (params) => this.#callWorker("PREP_GET", name, null, params),
-				run: (params) => this.#callWorker("PREP_RUN", name, null, params),
+				all: (params) => this.#callWorker("PREP_ALL", name, params),
+				get: (params) => this.#callWorker("PREP_GET", name, params),
+				run: (params) => this.#callWorker("PREP_RUN", name, params),
 			};
 		}
 	}
 
-	async #callWorker(type, name, sql, params) {
+	async #callWorker(type, name, params) {
+		if (this.#closed) throw new Error("SqlRite instance is closed");
 		await this.#readyPromise;
 		return new Promise((resolve, reject) => {
 			const id = this.#id++;
 			this.#promises.set(id, { resolve, reject });
-			this.#worker.postMessage({ id, type, name, sql, params });
+			this.#worker.postMessage({ id, type, name, params });
 		});
 	}
 
 	async close() {
+		if (this.#closed) return;
+		this.#closed = true;
 		await this.#readyPromise.catch(() => {});
-		return this.#callWorker("CLOSE");
+		return new Promise((resolve, reject) => {
+			const id = this.#id++;
+			this.#promises.set(id, { resolve, reject });
+			this.#worker.postMessage({ id, type: "CLOSE" });
+		});
 	}
 }

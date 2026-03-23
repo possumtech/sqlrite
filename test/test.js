@@ -64,7 +64,7 @@ describe("SqlRiteCore", () => {
 	});
 
 	test("jsonify() strips SQL prefixes from keys", () => {
-		const input = { "$name": "val1", ":age": 20, "@id": 1 };
+		const input = { $name: "val1", ":age": 20, "@id": 1 };
 		const output = SqlRiteCore.jsonify(input);
 		assert.strictEqual(output.name, "val1");
 		assert.strictEqual(output.age, 20);
@@ -111,17 +111,13 @@ describe("SqlRiteSync", () => {
 
 describe("SqlRite (Async)", () => {
 	test("Should throw if initialized via new SqlRite()", () => {
-		assert.throws(
-			() => new SqlRite(),
-			/SqlRite must be initialized using SqlRite.open/,
-		);
+		assert.throws(() => new SqlRite(), /SqlRite must be initialized using SqlRite.open/);
 	});
 
 	test("enforces foreign key constraints", async () => {
 		const sql = await SqlRite.open({ dir: "sql" });
 		await assert.rejects(
-			async () =>
-				await sql.addEquipment.run({ employee_id: 999, name: "Laptop" }),
+			async () => await sql.addEquipment.run({ employee_id: 999, name: "Laptop" }),
 			/FOREIGN KEY constraint failed/,
 		);
 		await sql.close();

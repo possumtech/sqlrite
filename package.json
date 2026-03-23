@@ -1,6 +1,6 @@
 {
 	"name": "@possumtech/sqlrite",
-	"version": "2.1.0",
+	"version": "2.2.0",
 	"description": "SQL Done Right",
 	"keywords": [
 		"node",
@@ -26,7 +26,8 @@
 		"npm": ">=11.1.0"
 	},
 	"scripts": {
-		"lint": "biome check .",
+		"lint": "biome check --write .",
+		"lint:ci": "biome check .",
 		"test": "node --experimental-test-coverage --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 --test test/*.js",
 		"debug": "node --experimental-test-coverage --trace-warnings --inspect-brk --test",
 		"check": "npm run lint && npm test",

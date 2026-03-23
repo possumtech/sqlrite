@@ -1,5 +1,9 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
+	"formatter": {
+		"indentStyle": "tab",
+		"lineWidth": 100
+	},
 	"linter": {
 		"rules": {
 			"complexity": {
@@ -7,10 +11,17 @@
 			},
 			"correctness": {
 				"noConstructorReturn": "off"
-			},
-			"suspicious": {
-				"noExplicitAny": "off"
 			}
 		}
+	},
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	},
+	"files": {
+		"includes": ["**/*.js", "**/*.json"]
 	}
 }
