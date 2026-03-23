@@ -20,7 +20,11 @@
 	"license": "MIT",
 	"author": "@wikitopian",
 	"type": "module",
-	"main": "SqlRite.js",
+	"exports": {
+		".": "./SqlRite.js",
+		"./sync": "./SqlRiteSync.js",
+		"./core": "./SqlRiteCore.js"
+	},
 	"engines": {
 		"node": ">=25.0.0",
 		"npm": ">=11.1.0"

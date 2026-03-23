@@ -1,9 +1,6 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import SqlRiteSync from "./SqlRiteSync.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INTERNAL = Symbol("SqlRiteInternal");
 
 export { SqlRiteSync };
@@ -27,7 +24,7 @@ export default class SqlRite {
 		};
 		const merged = { ...defaults, ...options };
 
-		this.#worker = new Worker(path.join(__dirname, "SqlWorker.js"), {
+		this.#worker = new Worker(new URL("./SqlWorker.js", import.meta.url), {
 			workerData: { options: merged },
 		});
 
@@ -104,21 +101,25 @@ export default class SqlRite {
 	async #callWorker(type, name, params) {
 		if (this.#closed) throw new Error("SqlRite instance is closed");
 		await this.#readyPromise;
-		return new Promise((resolve, reject) => {
-			const id = this.#id++;
-			this.#promises.set(id, { resolve, reject });
-			this.#worker.postMessage({ id, type, name, params });
-		});
+		const { promise, resolve, reject } = Promise.withResolvers();
+		const id = this.#id++;
+		this.#promises.set(id, { resolve, reject });
+		this.#worker.postMessage({ id, type, name, params });
+		return promise;
 	}
 
 	async close() {
 		if (this.#closed) return;
 		this.#closed = true;
 		await this.#readyPromise.catch(() => {});
-		return new Promise((resolve, reject) => {
-			const id = this.#id++;
-			this.#promises.set(id, { resolve, reject });
-			this.#worker.postMessage({ id, type: "CLOSE" });
-		});
+		const { promise, resolve, reject } = Promise.withResolvers();
+		const id = this.#id++;
+		this.#promises.set(id, { resolve, reject });
+		this.#worker.postMessage({ id, type: "CLOSE" });
+		return promise;
+	}
+
+	async [Symbol.asyncDispose]() {
+		await this.close();
 	}
 }

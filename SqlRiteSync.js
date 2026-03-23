@@ -42,4 +42,8 @@ export default class SqlRiteSync {
 	close() {
 		this.#db.close();
 	}
+
+	[Symbol.dispose]() {
+		this.close();
+	}
 }

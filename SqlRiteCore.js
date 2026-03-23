@@ -18,28 +18,16 @@ export default class SqlRiteCore {
 	}
 
 	static getFiles(dir) {
-		const files = [];
-		const items = fs.readdirSync(dir, { withFileTypes: true });
-
-		for (const item of items) {
-			const fullPath = path.join(dir, item.name);
-			if (item.isDirectory()) {
-				files.push(...SqlRiteCore.getFiles(fullPath));
-			} else if (item.name.endsWith(".sql")) {
-				files.push(fullPath);
-			}
-		}
-
-		return SqlRiteCore.#sortFiles(files);
-	}
-
-	static #sortFiles(files) {
-		return [...files].sort((a, b) =>
-			path.basename(a).localeCompare(path.basename(b), undefined, {
-				numeric: true,
-				sensitivity: "base",
-			}),
-		);
+		return fs
+			.readdirSync(dir, { withFileTypes: true, recursive: true })
+			.filter((f) => f.isFile() && f.name.endsWith(".sql"))
+			.map((f) => path.join(f.parentPath, f.name))
+			.toSorted((a, b) =>
+				path.basename(a).localeCompare(path.basename(b), undefined, {
+					numeric: true,
+					sensitivity: "base",
+				}),
+			);
 	}
 
 	static parseSql(files) {

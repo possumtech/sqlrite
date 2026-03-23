@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { parseArgs } from "node:util";
 import SqlRiteCore from "../SqlRiteCore.js";
 
 function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
@@ -69,6 +70,6 @@ function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
 	console.log(`Generated ${options.output}`);
 }
 
-const args = process.argv.slice(2);
-const dir = args[0] || "sql";
+const { positionals } = parseArgs({ allowPositionals: true });
+const dir = positionals[0] || "sql";
 generateTypes({ dir, output: "SqlRite.d.ts" });
