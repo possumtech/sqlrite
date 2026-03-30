@@ -42,6 +42,14 @@ SELECT * FROM users WHERE name REGEXP $pattern;
 ```
 The regex engine is V8's JIT-compiled Irregexp (via JS `RegExp`). Compiled patterns are cached per connection.
 
+A `uuid()` function is also available via `crypto.randomUUID()`, useful as a column default:
+```sql
+CREATE TABLE tokens (
+  id TEXT PRIMARY KEY DEFAULT (uuid()),
+  label TEXT NOT NULL
+) STRICT;
+```
+
 ## 5. LLM Operational Rules
 - **Method Discovery**: Grep for `-- PREP:` or `-- EXEC:` to find available methods.
 - **Schema Discovery**: Grep for `-- INIT:` to understand the data model.

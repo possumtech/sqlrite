@@ -180,6 +180,29 @@ test("REGEXP function", () => {
 	fs.rmSync("sql_regex", { recursive: true, force: true });
 });
 
+test("uuid() function", () => {
+	if (!fs.existsSync("sql_uuid")) fs.mkdirSync("sql_uuid");
+	fs.writeFileSync(
+		"sql_uuid/001.sql",
+		"-- INIT: createTokens\nCREATE TABLE tokens (id TEXT PRIMARY KEY DEFAULT (uuid()), label TEXT NOT NULL) STRICT;\n" +
+			"-- PREP: addToken\nINSERT INTO tokens (label) VALUES ($label) RETURNING id;\n" +
+			"-- PREP: getToken\nSELECT * FROM tokens WHERE id = $id;",
+	);
+
+	const sql = new SqlRiteSync({ dir: "sql_uuid" });
+	const { id } = sql.addToken.get({ label: "first" });
+	assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+
+	const { id: id2 } = sql.addToken.get({ label: "second" });
+	assert.notStrictEqual(id, id2);
+
+	const row = sql.getToken.get({ id });
+	assert.strictEqual(row.label, "first");
+
+	sql.close();
+	fs.rmSync("sql_uuid", { recursive: true, force: true });
+});
+
 test("Multi-directory support", () => {
 	if (!fs.existsSync("sql2")) fs.mkdirSync("sql2");
 	fs.writeFileSync("sql2/extra.sql", "-- PREP: extra\nSELECT 1 as val;");

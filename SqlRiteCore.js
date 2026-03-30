@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -20,6 +21,8 @@ export default class SqlRiteCore {
 			}
 			return re.test(string) ? 1 : 0;
 		});
+
+		db.function("uuid", () => crypto.randomUUID());
 	}
 
 	static loadChunks(options) {
