@@ -34,7 +34,15 @@ Methods defined via `-- PREP` are objects with three execution modes:
 | `.get({ params })` | Single row lookup | `Object` (first row) or `undefined` |
 | `.all({ params })` | Multi-row queries | `Array<Object>` |
 
-## 4. LLM Operational Rules
+## 4. Inline REGEXP
+SQLite's `REGEXP` operator is enabled on every connection. Use it in `WHERE` clauses:
+```sql
+-- PREP: searchUsers
+SELECT * FROM users WHERE name REGEXP $pattern;
+```
+The regex engine is V8's JIT-compiled Irregexp (via JS `RegExp`). Compiled patterns are cached per connection.
+
+## 5. LLM Operational Rules
 - **Method Discovery**: Grep for `-- PREP:` or `-- EXEC:` to find available methods.
 - **Schema Discovery**: Grep for `-- INIT:` to understand the data model.
 - **Parameter Mapping**: Object keys in JS must match the names defined in SQL.
@@ -46,7 +54,7 @@ Methods defined via `-- PREP` are objects with three execution modes:
   WHERE ($filter IS NULL OR category = $filter)
   ```
 
-## 5. Type Safety & LSP Support
+## 6. Type Safety & LSP Support
 SqlRite supports automatic TypeScript generation to provide LSPs and LLMs with precise method signatures.
 
 ### Codegen Workflow
@@ -56,7 +64,7 @@ SqlRite supports automatic TypeScript generation to provide LSPs and LLMs with p
 
 This ensures that the dynamically generated methods are "visible" to static analysis tools, significantly reducing errors in implementation.
 
-## 6. Typical Workflow for Agents
+## 7. Typical Workflow for Agents
 1. **Understand State**: Read schema definitions in files containing `-- INIT`.
 2. **Implement Logic**: Create/edit a `.sql` file with a `-- PREP: <name>` or `-- EXEC: <name>` tag.
 3. **Sync Types**: Run `npm run build:types` to update the library's type definitions.

@@ -158,6 +158,7 @@ SqlRite automatically executes these PRAGMAs on every connection to ensure high 
 *   **WAL Mode**: `PRAGMA journal_mode = WAL` enables concurrent readers and writers.
 *   **Foreign Keys**: `PRAGMA foreign_keys = ON` enforces relational constraints.
 *   **DML Strict Mode**: `PRAGMA dml_strict = ON` catches common SQL errors (like using double quotes for strings).
+*   **REGEXP**: Registers a `REGEXP` function (V8 JIT-compiled) so `WHERE col REGEXP $pattern` works out of the box. Patterns are cached per connection.
 
 ### Metadata Headers
 
