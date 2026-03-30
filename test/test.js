@@ -153,6 +153,33 @@ describe("SqlRite (Async)", () => {
 	});
 });
 
+test("REGEXP function", () => {
+	if (!fs.existsSync("sql_regex")) fs.mkdirSync("sql_regex");
+	fs.writeFileSync(
+		"sql_regex/001.sql",
+		"-- INIT: createItems\nCREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT;\n" +
+			"-- PREP: addItem\nINSERT INTO items (name) VALUES ($name);\n" +
+			"-- PREP: findByRegex\nSELECT name FROM items WHERE name REGEXP $pattern ORDER BY name;",
+	);
+
+	const sql = new SqlRiteSync({ dir: "sql_regex" });
+	sql.addItem.run({ name: "alice" });
+	sql.addItem.run({ name: "bob" });
+	sql.addItem.run({ name: "alicia" });
+	sql.addItem.run({ name: "charlie" });
+
+	const matches = sql.findByRegex.all({ pattern: "^ali" });
+	assert.strictEqual(matches.length, 2);
+	assert.strictEqual(matches[0].name, "alice");
+	assert.strictEqual(matches[1].name, "alicia");
+
+	const none = sql.findByRegex.all({ pattern: "^zzz" });
+	assert.strictEqual(none.length, 0);
+
+	sql.close();
+	fs.rmSync("sql_regex", { recursive: true, force: true });
+});
+
 test("Multi-directory support", () => {
 	if (!fs.existsSync("sql2")) fs.mkdirSync("sql2");
 	fs.writeFileSync("sql2/extra.sql", "-- PREP: extra\nSELECT 1 as val;");

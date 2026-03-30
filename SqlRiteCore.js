@@ -9,6 +9,17 @@ export default class SqlRiteCore {
 		db.exec("PRAGMA synchronous = NORMAL;");
 		db.exec("PRAGMA foreign_keys = ON;");
 		db.exec("PRAGMA dml_strict = ON;");
+
+		const regexCache = new Map();
+		db.function("regexp", { deterministic: true }, (pattern, string) => {
+			if (string === null) return 0;
+			let re = regexCache.get(pattern);
+			if (!re) {
+				re = new RegExp(pattern);
+				regexCache.set(pattern, re);
+			}
+			return re.test(string) ? 1 : 0;
+		});
 	}
 
 	static loadChunks(options) {
