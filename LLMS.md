@@ -71,7 +71,30 @@ SELECT * FROM files WHERE glorp($pattern, name);
   WHERE ($filter IS NULL OR category = $filter)
   ```
 
-## 6. Type Safety & LSP Support
+## 6. Custom SQL Functions
+Register custom SQL functions via module paths. Each module's filename becomes the SQL function name.
+
+**Module contract:**
+- Default export: the handler function (required)
+- Named export `deterministic`: boolean (optional, defaults to false)
+
+```javascript
+// db/getTokens.js
+import { encode } from "tiktoken";
+export const deterministic = true;
+export default (text) => encode(text).length;
+```
+
+```javascript
+const sql = await SqlRite.open({
+  dir: "sql",
+  functions: ["./db/getTokens.js"],
+});
+```
+
+Functions are registered before SQL chunks load, so they are available in `-- INIT` blocks and prepared statements. Modules resolve dependencies from the app's own `node_modules`.
+
+## 7. Type Safety & LSP Support
 SqlRite supports automatic TypeScript generation to provide LSPs and LLMs with precise method signatures.
 
 ### Codegen Workflow
@@ -81,7 +104,7 @@ SqlRite supports automatic TypeScript generation to provide LSPs and LLMs with p
 
 This ensures that the dynamically generated methods are "visible" to static analysis tools, significantly reducing errors in implementation.
 
-## 7. Typical Workflow for Agents
+## 8. Typical Workflow for Agents
 1. **Understand State**: Read schema definitions in files containing `-- INIT`.
 2. **Implement Logic**: Create/edit a `.sql` file with a `-- PREP: <name>` or `-- EXEC: <name>` tag.
 3. **Sync Types**: Run `npm run build:types` to update the library's type definitions.

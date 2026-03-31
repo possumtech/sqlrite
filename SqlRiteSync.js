@@ -15,6 +15,7 @@ export default class SqlRiteSync {
 		this.#db = new DatabaseSync(merged.path, merged);
 
 		SqlRiteCore.initDb(this.#db);
+		SqlRiteCore.registerFunctions(this.#db, merged.functions);
 		const chunks = SqlRiteCore.loadChunks(merged);
 
 		for (const init of chunks.INIT) {

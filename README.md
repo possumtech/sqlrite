@@ -190,6 +190,35 @@ Files are sorted **numerically by filename prefix** across all directories (e.g.
 | :--- | :--- | :--- | :--- |
 | `path` | `string` | `":memory:"` | Path to the SQLite database file. |
 | `dir` | `string\|string[]` | `"sql"` | Directory or directories to scan for `.sql` files. |
+| `functions` | `string\|string[]` | — | Module path(s) to custom SQL function files. |
+
+### Custom SQL Functions
+
+Register custom SQL functions by pointing to JS modules. Each module's filename becomes the SQL function name.
+
+```javascript
+// db/getTokens.js
+import { encode } from "tiktoken";
+export const deterministic = true;
+export default (text) => encode(text).length;
+```
+
+```javascript
+const sql = await SqlRite.open({
+  dir: "sql",
+  functions: ["./db/getTokens.js"],
+});
+```
+
+```sql
+-- PREP: longPosts
+SELECT * FROM posts WHERE getTokens(body) > 1000;
+```
+
+The module contract:
+*   **Default export** (required): The handler function.
+*   **`deterministic` named export** (optional): Set to `true` to allow SQLite query optimization.
+*   **Filename**: Becomes the SQL function name (e.g., `getTokens.js` → `getTokens()`).
 
 ---
 

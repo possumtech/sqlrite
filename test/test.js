@@ -22,9 +22,14 @@ fs.writeFileSync(
 		"-- PREP: getPositions\nSELECT name, position FROM employees;\n-- PREP: getHighestPaidEmployee\nSELECT * FROM employees ORDER BY salary DESC LIMIT 1;\n-- EXEC: deleteTable\nDROP TABLE IF EXISTS sync_test;",
 );
 
+if (!fs.existsSync("db_fn")) fs.mkdirSync("db_fn");
+fs.writeFileSync("db_fn/double.js", "export const deterministic = true;\nexport default (x) => x * 2;\n");
+fs.writeFileSync("db_fn/greet.js", "export default (name) => `hello ${name}`;\n");
+
 after(() => {
 	fs.rmSync("sql", { recursive: true, force: true });
 	fs.rmSync("sql2", { recursive: true, force: true });
+	fs.rmSync("db_fn", { recursive: true, force: true });
 });
 
 describe("SqlRiteCore", () => {
@@ -236,6 +241,60 @@ test("glorp() function routes glob and regex", () => {
 
 	sql.close();
 	fs.rmSync("sql_glorp", { recursive: true, force: true });
+});
+
+test("custom functions (sync)", () => {
+	if (!fs.existsSync("sql_fn")) fs.mkdirSync("sql_fn");
+	fs.writeFileSync(
+		"sql_fn/001.sql",
+		"-- INIT: t\nCREATE TABLE t (val INTEGER) STRICT;\n" +
+			"-- PREP: getDouble\nSELECT double($x) as result;",
+	);
+	const sql = new SqlRiteSync({ dir: "sql_fn", functions: ["./db_fn/double.js"] });
+	const row = sql.getDouble.get({ x: 5 });
+	assert.strictEqual(row.result, 10);
+	sql.close();
+	fs.rmSync("sql_fn", { recursive: true, force: true });
+});
+
+test("custom functions (async)", async () => {
+	if (!fs.existsSync("sql_fn2")) fs.mkdirSync("sql_fn2");
+	fs.writeFileSync(
+		"sql_fn2/001.sql",
+		"-- INIT: t\nCREATE TABLE t (val TEXT) STRICT;\n" +
+			"-- PREP: getGreeting\nSELECT greet($name) as result;",
+	);
+	const sql = await SqlRite.open({ dir: "sql_fn2", functions: ["./db_fn/greet.js"] });
+	const row = await sql.getGreeting.get({ name: "world" });
+	assert.strictEqual(row.result, "hello world");
+	await sql.close();
+	fs.rmSync("sql_fn2", { recursive: true, force: true });
+});
+
+test("custom functions (multiple + single string)", () => {
+	if (!fs.existsSync("sql_fn3")) fs.mkdirSync("sql_fn3");
+	fs.writeFileSync(
+		"sql_fn3/001.sql",
+		"-- INIT: t\nCREATE TABLE t (id INTEGER) STRICT;\n" +
+			"-- PREP: testBoth\nSELECT double($x) as d, greet($name) as g;",
+	);
+	const sql = new SqlRiteSync({
+		dir: "sql_fn3",
+		functions: ["./db_fn/double.js", "./db_fn/greet.js"],
+	});
+	const row = sql.testBoth.get({ x: 3, name: "test" });
+	assert.strictEqual(row.d, 6);
+	assert.strictEqual(row.g, "hello test");
+	sql.close();
+	fs.rmSync("sql_fn3", { recursive: true, force: true });
+
+	// Single string form
+	if (!fs.existsSync("sql_fn4")) fs.mkdirSync("sql_fn4");
+	fs.writeFileSync("sql_fn4/001.sql", "-- PREP: getD\nSELECT double($x) as result;");
+	const sql2 = new SqlRiteSync({ dir: "sql_fn4", functions: "./db_fn/double.js" });
+	assert.strictEqual(sql2.getD.get({ x: 7 }).result, 14);
+	sql2.close();
+	fs.rmSync("sql_fn4", { recursive: true, force: true });
 });
 
 test("Multi-directory support", () => {

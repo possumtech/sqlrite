@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 export default class SqlRiteCore {
@@ -42,6 +43,25 @@ export default class SqlRiteCore {
 			}
 			return re.test(string) ? 1 : 0;
 		});
+	}
+
+	static registerFunctions(db, functions) {
+		if (!functions) return;
+		const require = createRequire(import.meta.url);
+		const paths = Array.isArray(functions) ? functions : [functions];
+
+		for (const funcPath of paths) {
+			const resolved = path.resolve(funcPath);
+			const mod = require(resolved);
+			const handler = mod.default;
+			if (typeof handler !== "function") {
+				throw new Error(`SqlRite: ${funcPath} must have a default export that is a function`);
+			}
+			const name = path.basename(resolved, path.extname(resolved));
+			const opts = {};
+			if (mod.deterministic) opts.deterministic = true;
+			db.function(name, opts, handler);
+		}
 	}
 
 	static #globToRegex(glob) {
