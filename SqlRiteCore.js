@@ -4,6 +4,7 @@ import path from "node:path";
 
 export default class SqlRiteCore {
 	static #CHUNK_REGEX = /^--\s*(INIT|EXEC|PREP):\s*(\w+)/gim;
+	static #REGEX_INDICATORS = /[+(){}|\\$]/;
 
 	static initDb(db) {
 		db.exec("PRAGMA journal_mode = WAL;");
@@ -27,6 +28,37 @@ export default class SqlRiteCore {
 		if (!SqlRiteCore.#hasFunction(db, "uuid()")) {
 			db.function("uuid", () => crypto.randomUUID());
 		}
+
+		const glorpCache = new Map();
+		db.function("glorp", { deterministic: true }, (pattern, string) => {
+			if (string === null) return 0;
+			let re = glorpCache.get(pattern);
+			if (!re) {
+				const src = SqlRiteCore.#REGEX_INDICATORS.test(pattern)
+					? pattern
+					: SqlRiteCore.#globToRegex(pattern);
+				re = new RegExp(src);
+				glorpCache.set(pattern, re);
+			}
+			return re.test(string) ? 1 : 0;
+		});
+	}
+
+	static #globToRegex(glob) {
+		let result = "^";
+		for (let i = 0; i < glob.length; i++) {
+			const c = glob[i];
+			if (c === "*") result += ".*";
+			else if (c === "?") result += ".";
+			else if (c === "[") {
+				const close = glob.indexOf("]", i + 1);
+				if (close === -1) { result += "\\["; continue; }
+				result += glob.slice(i, close + 1);
+				i = close;
+			} else if (".+^${}()|\\".includes(c)) result += `\\${c}`;
+			else result += c;
+		}
+		return `${result}$`;
 	}
 
 	static #hasFunction(db, expr) {
