@@ -4,18 +4,24 @@ import SqlRiteCore from "./SqlRiteCore.js";
 export default class SqlRiteSync {
 	#db = null;
 	#stmts = new Map();
-	#protected = new Set(["close", "constructor"]);
+	#protected = new Set(["close", "open", "constructor"]);
 
-	constructor(options = {}) {
-		const defaults = {
-			path: ":memory:",
-			dir: "sql",
-		};
-		const merged = { ...defaults, ...options };
-		this.#db = new DatabaseSync(merged.path, merged);
+	constructor(options = {}, db) {
+		const merged = { path: ":memory:", dir: "sql", ...options };
+		this.#db = db ?? new DatabaseSync(merged.path, merged);
+		if (!db) SqlRiteCore.initDb(this.#db);
+		this.#setupChunks(merged);
+	}
 
-		SqlRiteCore.initDb(this.#db);
-		SqlRiteCore.registerFunctions(this.#db, merged.functions);
+	static async open(options = {}) {
+		const merged = { path: ":memory:", dir: "sql", ...options };
+		const db = new DatabaseSync(merged.path, merged);
+		SqlRiteCore.initDb(db);
+		await SqlRiteCore.registerFunctions(db, merged.functions);
+		return new SqlRiteSync(merged, db);
+	}
+
+	#setupChunks(merged) {
 		const chunks = SqlRiteCore.loadChunks(merged);
 
 		for (const init of chunks.INIT) {

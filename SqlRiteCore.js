@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
 
 export default class SqlRiteCore {
@@ -45,14 +44,13 @@ export default class SqlRiteCore {
 		});
 	}
 
-	static registerFunctions(db, functions) {
+	static async registerFunctions(db, functions) {
 		if (!functions) return;
-		const require = createRequire(import.meta.url);
 		const paths = Array.isArray(functions) ? functions : [functions];
 
 		for (const funcPath of paths) {
 			const resolved = path.resolve(funcPath);
-			const mod = require(resolved);
+			const mod = await import(resolved);
 			const handler = mod.default;
 			if (typeof handler !== "function") {
 				throw new Error(`SqlRite: ${funcPath} must have a default export that is a function`);
@@ -72,11 +70,15 @@ export default class SqlRiteCore {
 			else if (c === "?") result += ".";
 			else if (c === "[") {
 				const close = glob.indexOf("]", i + 1);
-				if (close === -1) { result += "\\["; continue; }
+				if (close === -1) {
+					result += "\\[";
+					continue;
+				}
 				result += glob.slice(i, close + 1);
 				i = close;
-			} else if (".+^${}()|\\".includes(c)) result += `\\${c}`;
-			else result += c;
+			} else if (/[.+^${}()|\\]/.test(c)) {
+				result += `\\${c}`;
+			} else result += c;
 		}
 		return `${result}$`;
 	}

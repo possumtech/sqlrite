@@ -6,7 +6,7 @@ const { options } = workerData;
 const db = new DatabaseSync(options.path, options);
 
 SqlRiteCore.initDb(db);
-SqlRiteCore.registerFunctions(db, options.functions);
+await SqlRiteCore.registerFunctions(db, options.functions);
 
 const stmts = new Map();
 const execs = new Map();
