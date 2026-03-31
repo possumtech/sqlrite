@@ -211,41 +211,6 @@ test("uuid() function", () => {
 	fs.rmSync("sql_uuid", { recursive: true, force: true });
 });
 
-test("glorp() function routes glob and regex", () => {
-	if (!fs.existsSync("sql_glorp")) fs.mkdirSync("sql_glorp");
-	fs.writeFileSync(
-		"sql_glorp/001.sql",
-		"-- INIT: createFiles\nCREATE TABLE files (name TEXT NOT NULL) STRICT;\n" +
-			"-- PREP: addFile\nINSERT INTO files (name) VALUES ($name);\n" +
-			"-- PREP: findByGlorp\nSELECT name FROM files WHERE glorp($pattern, name) ORDER BY name;",
-	);
-
-	const sql = new SqlRiteSync({ dir: "sql_glorp" });
-	for (const name of ["index.js", "utils.js", "readme.md", "test.ts", "data.json"]) {
-		sql.addFile.run({ name });
-	}
-
-	// Glob patterns (no regex indicators)
-	const jsFiles = sql.findByGlorp.all({ pattern: "*.js" });
-	assert.strictEqual(jsFiles.length, 2);
-	assert.strictEqual(jsFiles[0].name, "index.js");
-	assert.strictEqual(jsFiles[1].name, "utils.js");
-
-	const single = sql.findByGlorp.all({ pattern: "????.ts" });
-	assert.strictEqual(single.length, 1);
-	assert.strictEqual(single[0].name, "test.ts");
-
-	// Regex patterns (detected by indicators)
-	const regexMatch = sql.findByGlorp.all({ pattern: "^(index|utils)" });
-	assert.strictEqual(regexMatch.length, 2);
-
-	const dotRegex = sql.findByGlorp.all({ pattern: "\\.(js|ts)$" });
-	assert.strictEqual(dotRegex.length, 3);
-
-	sql.close();
-	fs.rmSync("sql_glorp", { recursive: true, force: true });
-});
-
 test("custom functions (sync via open)", async () => {
 	if (!fs.existsSync("sql_fn")) fs.mkdirSync("sql_fn");
 	fs.writeFileSync(

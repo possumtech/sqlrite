@@ -160,7 +160,7 @@ SqlRite automatically executes these PRAGMAs on every connection to ensure high 
 *   **DML Strict Mode**: `PRAGMA dml_strict = ON` catches common SQL errors (like using double quotes for strings).
 *   **REGEXP**: Registers a `REGEXP` function (V8 JIT-compiled) so `WHERE col REGEXP $pattern` works out of the box. Patterns are cached per connection.
 *   **uuid()**: Registers a `uuid()` function (`crypto.randomUUID()`) for use in defaults and queries (e.g., `DEFAULT (uuid())`).
-*   **glorp()**: A universal pattern matcher — accepts both glob (`*.js`, `test_??`) and regex (`^foo\d+$`) patterns. Glob patterns are auto-detected and converted; regex patterns pass through directly. All compiled patterns are cached.
+
 
 ### Metadata Headers
 

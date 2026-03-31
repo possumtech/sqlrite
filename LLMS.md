@@ -50,15 +50,6 @@ CREATE TABLE tokens (
 ) STRICT;
 ```
 
-A `glorp(pattern, string)` function is available for universal pattern matching. It auto-detects whether the pattern is a glob or regex and routes accordingly:
-```sql
--- PREP: findFiles
-SELECT * FROM files WHERE glorp($pattern, name);
-```
-- Glob patterns (`*.js`, `test_??`, `[abc]*`) are detected and converted to regex internally.
-- Regex patterns (containing `+`, `(`, `)`, `|`, `{`, `}`, `$`, `\`) pass through directly.
-- All compiled patterns are cached per connection.
-
 ## 5. LLM Operational Rules
 - **Method Discovery**: Grep for `-- PREP:` or `-- EXEC:` to find available methods.
 - **Schema Discovery**: Grep for `-- INIT:` to understand the data model.
