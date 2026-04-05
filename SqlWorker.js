@@ -14,7 +14,7 @@ const execs = new Map();
 const chunks = SqlRiteCore.loadChunks(options);
 
 for (const init of chunks.INIT) {
-	db.exec(init.sql);
+	db.exec(SqlRiteCore.template(init.sql, options.params));
 }
 
 for (const exec of chunks.EXEC) {
@@ -42,7 +42,7 @@ parentPort.on("message", (msg) => {
 		let result;
 		if (type === "EXEC") {
 			const sql = execs.get(name);
-			if (sql) db.exec(sql);
+			if (sql) db.exec(SqlRiteCore.template(sql, params));
 			result = null;
 		} else if (type === "PREP_ALL") {
 			result = stmts.get(name).all(SqlRiteCore.jsonify(params));

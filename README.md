@@ -166,8 +166,8 @@ SqlRite automatically executes these PRAGMAs on every connection to ensure high 
 
 | Syntax | Name | Behavior |
 | :--- | :--- | :--- |
-| `-- INIT: name` | **Initializer** | Runs once automatically when `SqlRite` is instantiated. |
-| `-- EXEC: name` | **Transaction** | Exposes a method `sql.name()` for one-off SQL execution. |
+| `-- INIT: name` | **Initializer** | Runs once automatically when `SqlRite` is instantiated. Supports `$variable` templating via the `params` option. |
+| `-- EXEC: name` | **Transaction** | Exposes a method `sql.name(params)` for SQL execution with optional `$variable` templating. |
 | `-- PREP: name` | **Statement** | Compiles a Prepared Statement; exposes `.all()`, `.get()`, and `.run()`. |
 
 ### Locality & Multi-Directory Support
@@ -191,6 +191,7 @@ Files are sorted **numerically by filename prefix** across all directories (e.g.
 | `path` | `string` | `":memory:"` | Path to the SQLite database file. |
 | `dir` | `string\|string[]` | `"sql"` | Directory or directories to scan for `.sql` files. |
 | `functions` | `string\|string[]` | — | Module path(s) to custom SQL function files. |
+| `params` | `object` | — | Key-value pairs for `$variable` substitution in `INIT` blocks. |
 
 ### Custom SQL Functions
 

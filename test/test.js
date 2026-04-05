@@ -211,6 +211,59 @@ test("uuid() function", () => {
 	fs.rmSync("sql_uuid", { recursive: true, force: true });
 });
 
+test("INIT params templating", () => {
+	if (!fs.existsSync("sql_init_params")) fs.mkdirSync("sql_init_params");
+	fs.writeFileSync(
+		"sql_init_params/001.sql",
+		"-- INIT: configure\nPRAGMA cache_size = $cacheSize;\n" +
+			"-- PREP: getCacheSize\nPRAGMA cache_size;",
+	);
+	const sql = new SqlRiteSync({
+		dir: "sql_init_params",
+		params: { cacheSize: 5000 },
+	});
+	const row = sql.getCacheSize.get();
+	assert.strictEqual(row.cache_size, 5000);
+	sql.close();
+	fs.rmSync("sql_init_params", { recursive: true, force: true });
+});
+
+test("EXEC params templating", () => {
+	if (!fs.existsSync("sql_exec_params")) fs.mkdirSync("sql_exec_params");
+	fs.writeFileSync(
+		"sql_exec_params/001.sql",
+		"-- INIT: createTable\nCREATE TABLE kv (key TEXT, val TEXT) STRICT;\n" +
+			"-- EXEC: insertKv\nINSERT INTO kv VALUES ($key, $val);\n" +
+			"-- PREP: getAll\nSELECT * FROM kv;",
+	);
+	const sql = new SqlRiteSync({ dir: "sql_exec_params" });
+	sql.insertKv({ key: "name", val: "Alice" });
+	sql.insertKv({ key: "role", val: "O'Brien" });
+	const rows = sql.getAll.all();
+	assert.strictEqual(rows.length, 2);
+	assert.strictEqual(rows[0].val, "Alice");
+	assert.strictEqual(rows[1].val, "O'Brien");
+	sql.close();
+	fs.rmSync("sql_exec_params", { recursive: true, force: true });
+});
+
+test("EXEC params templating (async)", async () => {
+	if (!fs.existsSync("sql_exec_async")) fs.mkdirSync("sql_exec_async");
+	fs.writeFileSync(
+		"sql_exec_async/001.sql",
+		"-- INIT: createTable\nCREATE TABLE kv (key TEXT, val TEXT) STRICT;\n" +
+			"-- EXEC: insertKv\nINSERT INTO kv VALUES ($key, $val);\n" +
+			"-- PREP: getAll\nSELECT * FROM kv;",
+	);
+	const sql = await SqlRite.open({ dir: "sql_exec_async" });
+	await sql.insertKv({ key: "x", val: "y" });
+	const rows = await sql.getAll.all();
+	assert.strictEqual(rows.length, 1);
+	assert.strictEqual(rows[0].key, "x");
+	await sql.close();
+	fs.rmSync("sql_exec_async", { recursive: true, force: true });
+});
+
 test("custom functions (sync via open)", async () => {
 	if (!fs.existsSync("sql_fn")) fs.mkdirSync("sql_fn");
 	fs.writeFileSync(

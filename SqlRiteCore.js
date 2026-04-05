@@ -110,6 +110,18 @@ export default class SqlRiteCore {
 		return chunks;
 	}
 
+	static template(sql, params) {
+		if (!params) return sql;
+		return sql.replace(/\$(\w+)/g, (match, key) => {
+			if (!(key in params)) return match;
+			const value = params[key];
+			if (value === null) return "NULL";
+			if (typeof value === "number") return String(value);
+			if (typeof value === "boolean") return value ? "1" : "0";
+			return `'${String(value).replace(/'/g, "''")}'`;
+		});
+	}
+
 	static jsonify(params) {
 		if (!params) return {};
 		const result = {};

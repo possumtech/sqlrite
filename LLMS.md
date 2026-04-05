@@ -12,13 +12,23 @@ SqlRite scans `.sql` files for specific markers. Files are sorted numerically by
 
 ### `-- INIT: <name>` (Schema Definitions)
 - **Execution**: Runs automatically during initialization.
-- **Purpose**: Idempotent DDL (e.g., `CREATE TABLE IF NOT EXISTS`).
-- **Constraint**: Do not use parameters.
+- **Purpose**: Idempotent DDL (e.g., `CREATE TABLE IF NOT EXISTS`), PRAGMA configuration.
+- **Templating**: Supports `$variable` substitution via the `params` option at open time.
+  ```sql
+  -- INIT: configure
+  PRAGMA cache_size = $cacheSize;
+  ```
+  ```javascript
+  const sql = await SqlRite.open({ dir: "sql", params: { cacheSize: 5000 } });
+  ```
 
 ### `-- EXEC: <method_name>` (Raw Commands)
-- **Execution**: Maps to `db.<method_name>()`.
-- **Purpose**: Non-parameterized SQL execution (e.g., DDL, migrations, `PRAGMA` changes).
-- **Constraint**: Does not accept parameters. Use `-- PREP` with `.run()` for parameterized writes.
+- **Execution**: Maps to `db.<method_name>(params)`.
+- **Purpose**: SQL execution with optional `$variable` string templating.
+- **Templating**: Pass an object to substitute `$variable` placeholders. Use `-- PREP` with `.run()` for proper parameterized writes.
+  ```javascript
+  sql.insertRecord({ table: "users", val: "Alice" });
+  ```
 
 ### `-- PREP: <method_name>` (Application Logic)
 - **Execution**: Maps to `db.<method_name>`.

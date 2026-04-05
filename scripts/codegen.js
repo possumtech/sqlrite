@@ -21,6 +21,7 @@ function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
 		"	path?: string;",
 		"	dir?: string | string[];",
 		"	functions?: string | string[];",
+		"	params?: Record<string, string | number | boolean | null>;",
 		"}",
 		"",
 		"export interface SqlRiteResult {",

@@ -25,12 +25,12 @@ export default class SqlRiteSync {
 		const chunks = SqlRiteCore.loadChunks(merged);
 
 		for (const init of chunks.INIT) {
-			this.#db.exec(init.sql);
+			this.#db.exec(SqlRiteCore.template(init.sql, merged.params));
 		}
 
 		for (const exec of chunks.EXEC) {
 			if (this.#protected.has(exec.name)) continue;
-			this[exec.name] = () => this.#db.exec(exec.sql);
+			this[exec.name] = (params) => this.#db.exec(SqlRiteCore.template(exec.sql, params));
 		}
 
 		for (const prep of chunks.PREP) {

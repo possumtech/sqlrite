@@ -86,7 +86,7 @@ export default class SqlRite {
 	#setupMethods(names) {
 		for (const name of names.EXEC) {
 			if (this.#protected.has(name)) continue;
-			this[name] = () => this.#callWorker("EXEC", name);
+			this[name] = (params) => this.#callWorker("EXEC", name, params);
 		}
 		for (const name of names.PREP) {
 			if (this.#protected.has(name)) continue;
