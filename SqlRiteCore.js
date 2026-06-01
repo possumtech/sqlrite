@@ -1,15 +1,48 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
+/**
+ * @typedef {object} SqlRiteOptions
+ * @property {string} [path] Database file path (default ":memory:").
+ * @property {string|string[]} [dir] Directory or directories scanned for .sql files.
+ * @property {string|string[]} [functions] Module path(s) for custom SQL functions.
+ * @property {Record<string, string|number|boolean|null>} [params] $var substitutions for INIT blocks.
+ */
+
+/**
+ * @typedef {object} Chunk
+ * @property {string} type INIT, EXEC, or PREP.
+ * @property {string} name Tag name.
+ * @property {string} sql Block body.
+ * @property {boolean} [bigint] PREP only: read integer columns as BigInt.
+ */
+
+/** @typedef {{ INIT: Chunk[], EXEC: Chunk[], PREP: Chunk[] }} Chunks */
 
 export default class SqlRiteCore {
-	static #CHUNK_REGEX = /^--\s*(INIT|EXEC|PREP):\s*(\w+)/gim;
+	// Captures: 1=type, 2=name, 3=trailing flags (rest of the tag line, e.g. "bigint").
+	static #CHUNK_REGEX = /^--\s*(INIT|EXEC|PREP):\s*(\w+)(.*)$/gim;
+
+	// Connection posture. Spread under user options, so callers can override any of these.
+	static #HARDENED = Object.freeze({
+		enableForeignKeyConstraints: true, // enforce relational constraints
+		enableDoubleQuotedStringLiterals: false, // reject the DQS misfeature (a typo'd identifier becomes a string)
+		defensive: true, // block schema/page self-corruption (writable_schema, journal_mode=OFF, shadow tables)
+	});
+
+	/**
+	 * @param {SqlRiteOptions & { path: string }} options
+	 * @returns {DatabaseSync}
+	 */
+	static openDb(options) {
+		return new DatabaseSync(options.path, { ...SqlRiteCore.#HARDENED, ...options });
+	}
 
 	static initDb(db) {
 		db.exec("PRAGMA journal_mode = WAL;");
 		db.exec("PRAGMA synchronous = NORMAL;");
-		db.exec("PRAGMA foreign_keys = ON;");
-		db.exec("PRAGMA dml_strict = ON;");
 
 		if (!SqlRiteCore.#hasFunction(db, "'x' REGEXP 'x'")) {
 			const regexCache = new Map();
@@ -56,6 +89,10 @@ export default class SqlRiteCore {
 		}
 	}
 
+	/**
+	 * @param {SqlRiteOptions} options
+	 * @returns {Chunks}
+	 */
 	static loadChunks(options) {
 		const dirs = Array.isArray(options.dir) ? options.dir : [options.dir];
 		const files = dirs.flatMap((d) => SqlRiteCore.getFiles(d));
@@ -75,8 +112,14 @@ export default class SqlRiteCore {
 			);
 	}
 
+	/**
+	 * @param {string[]} files
+	 * @returns {Chunks}
+	 */
 	static parseSql(files) {
+		/** @type {Chunks} */
 		const chunks = { INIT: [], EXEC: [], PREP: [] };
+		/** @type {Map<string, { type: string, file: string }>} */
 		const seen = new Map();
 
 		for (const file of files) {
@@ -87,14 +130,15 @@ export default class SqlRiteCore {
 				const match = matches[i];
 				const type = match[1].toUpperCase();
 				const name = match[2];
+				const bigint = /\bbigint\b/i.test(match[3]);
 				const start = match.index + match[0].length;
 				const end = matches[i + 1]?.index ?? content.length;
 
 				const sql = content.slice(start, end).trim();
 				if (!sql) continue;
 
-				if (type !== "INIT" && seen.has(name)) {
-					const prev = seen.get(name);
+				const prev = type !== "INIT" ? seen.get(name) : undefined;
+				if (prev) {
 					console.warn(
 						`SqlRite: duplicate name "${name}" (${type} in ${file}) overwrites (${prev.type} in ${prev.file})`,
 					);
@@ -103,7 +147,7 @@ export default class SqlRiteCore {
 					seen.set(name, { type, file });
 				}
 
-				chunks[type].push({ type, name, sql });
+				chunks[type].push({ type, name, sql, bigint });
 			}
 		}
 

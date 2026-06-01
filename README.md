@@ -1,214 +1,227 @@
-# 🪨 SqlRite
+# SqlRite
 
-[![npm version](https://img.shields.io/npm/v/@possumtech/sqlrite?color=brightgreen)](https://www.npmjs.com/package/@possumtech/sqlrite)
-[![license](https://img.shields.io/github/license/possumtech/sqlrite)](LICENSE)
-[![node version](https://img.shields.io/badge/node-%3E%3D25.0.0-blue)](https://nodejs.org)
+SQL-first persistence for Node.js. A zero-dependency wrapper over the built-in
+`node:sqlite` `DatabaseSync`. SQL lives in `.sql` files tagged with comment
+markers; SqlRite turns each tagged block into a JavaScript method.
 
-**SQL Done Right.** A high-performance, opinionated, and LLM-ready wrapper for Node.js native SQLite.
+- Requires Node `>=25.0.0`, npm `>=11.1.0`.
+- No runtime dependencies.
+- Two facades over one core: async (Worker thread) and sync.
 
----
-
-## 📖 About
-
-SqlRite is a thin, zero-dependency wrapper around the [native Node.js `sqlite` module](https://nodejs.org/api/sqlite.html). It enforces a clean separation of concerns by treating SQL as a first-class citizen, enabling a development workflow that is faster, more secure, and optimized for modern AI coding assistants.
-
-### Why SqlRite?
-
-1.  **⚡ Zero-Config Prepared Statements**: Define SQL in `.sql` files; call them as native JS methods.
-2.  **🧵 True Non-Blocking I/O**: The default async model offloads all DB operations to a dedicated Worker Thread.
-3.  **📦 LLM-Ready Architecture**: By isolating SQL from JS boilerplate, you provide AI agents with a clean, high-signal "Source of Truth" for your data layer.
-4.  **🧩 Locality of Behavior**: Keep your SQL files right next to the JS logic that uses them.
-5.  **🚀 Modern Standards**: Built for Node 25+, ESM-native, and uses the latest `node:sqlite` primitives.
-6.  **🛡️ Production-Ready Defaults**: Automatically enables WAL mode, Foreign Key enforcement, and DML Strictness.
-
----
-
-## 🛠 Installation
+## Install
 
 ```bash
 npm install @possumtech/sqlrite
 ```
 
----
+## Model
 
-## 🚀 Quick Start
+- Input: one or more directories of `.sql` files containing tagged blocks.
+- Output: an object whose methods are generated from those tags.
+- No implicit methods (`find`, `save`, …). Every operation is an explicit SQL block.
 
-### 1. Define your SQL (`src/users.sql`)
+### Tags
 
-SqlRite uses simple metadata headers to turn SQL chunks into JS methods. We recommend using `STRICT` tables for maximum type safety.
+A block runs from its tag line to the next tag (or end of file). Empty blocks
+are skipped.
 
-```sql
--- INIT: createUsers
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  meta TEXT
-) STRICT;
+| Tag | Maps to | Behavior |
+| :-- | :-- | :-- |
+| `-- INIT: <name>` | (runs at open) | Executed once when the DB opens. Use idempotent DDL (`CREATE TABLE IF NOT EXISTS`) and `PRAGMA`s. Supports `$var` templating via the `params` option. |
+| `-- EXEC: <name>` | `db.<name>(params)` | `db.exec()` of the block, with optional `$var` string templating. Trusted, developer-authored SQL only — see [EXEC](#exec-trusted-sql). |
+| `-- PREP: <name>` | `db.<name>.{all,get,run}(params)` | Prepared statement. The only parameterized path for runtime values. |
 
--- PREP: addUser
-INSERT INTO users (name, meta) VALUES ($name, $meta);
+`-- INIT` names are not deduplicated. Duplicate `-- EXEC`/`-- PREP` names emit a
+warning; the last definition wins.
 
--- PREP: getUserByName
-SELECT * FROM users WHERE name = $name;
-```
+### File ordering
 
-### 2. Use it in Javascript
+Directories are scanned recursively for `.sql` files. Files are sorted by
+basename, numerically (`001-*.sql` before `002-*.sql`), across all directories
+merged into one execution plan.
 
-#### Asynchronous (Default - Recommended)
-Uses Worker Threads to keep your main event loop free.
+## Usage
+
+### Async (Worker thread)
+
+DB operations run in a dedicated Worker; methods return Promises. Construct only
+via `open()` — the constructor throws otherwise.
 
 ```javascript
 import SqlRite from "@possumtech/sqlrite";
 
-const sql = await SqlRite.open({ 
-  path: "data.db", 
-  dir: "src" 
-});
+const sql = await SqlRite.open({ path: "data.db", dir: "sql" });
 
-// PREP chunks expose .all(), .get(), and .run()
-// Named parameters are prefix-agnostic in JS (e.g., $name -> name)
-// Objects/Arrays are automatically stringified for you!
-await sql.addUser.run({ 
-  name: "Alice", 
-  meta: { theme: "dark", preferences: [1, 2, 3] } 
-});
-
+await sql.addUser.run({ name: "Alice", meta: { theme: "dark" } });
 const user = await sql.getUserByName.get({ name: "Alice" });
-console.log(JSON.parse(user.meta).theme); // Manual parse required for output
 
-await sql.close();
+await sql.close(); // or: await using sql = await SqlRite.open(...)
 ```
 
-
-#### Synchronous
-Ideal for CLI tools, migrations, or scripts.
+### Sync
 
 ```javascript
 import { SqlRiteSync } from "@possumtech/sqlrite";
 
-const sql = new SqlRiteSync({ dir: ["src", "migrations"] });
+const sql = new SqlRiteSync({ dir: ["migrations", "src/users"] });
 const users = sql.getUserByName.all({ name: "Alice" });
-sql.close();
+sql.close(); // or: using sql = new SqlRiteSync(...)
 ```
 
----
+`new SqlRiteSync()` does not register custom `functions`. Use the async
+`SqlRiteSync.open()` if you pass `functions` (registration is async).
 
-## 🏗️ Migrations & Schema Management
+### Entry points
 
-SqlRite provides a production-grade migration workflow built directly into the initialization process. It eliminates the need for external migration tools by leveraging deterministic file sorting and idempotent SQL.
+| Import | Export |
+| :-- | :-- |
+| `@possumtech/sqlrite` | default `SqlRite` (async), named `SqlRiteSync` |
+| `@possumtech/sqlrite/sync` | default `SqlRiteSync` |
+| `@possumtech/sqlrite/core` | default `SqlRiteCore` (static utilities) |
 
-### 1. Idempotent Schema (`-- INIT`)
-Blocks tagged with `-- INIT` are executed automatically when the database is opened. Use `IF NOT EXISTS` to ensure these operations are safe to run repeatedly.
+## PREP statements
 
-### 2. Deterministic Execution Order
-SqlRite recursively scans your directories and sorts all `.sql` files **numerically by their basename prefix** (e.g., `001-setup.sql` runs before `002-feature.sql`). This ensures your schema is built in the exact order you intended, across all provided directories.
+A `-- PREP` method exposes three modes:
 
-### 3. Multi-Directory "Overlay"
-You can keep your core migrations in one folder and feature-specific SQL right next to your application logic:
+| Mode | Use | Returns (sync / async) |
+| :-- | :-- | :-- |
+| `.run(params)` | `INSERT`/`UPDATE`/`DELETE` | `{ changes, lastInsertRowid }` |
+| `.get(params)` | single row | row object or `undefined` |
+| `.all(params)` | multiple rows | array of row objects |
+
+- Use named parameters (`$name`, `:name`, or `@name`). The JS interface takes an
+  object; keys map to parameter names. Leading `$`/`:`/`@` on keys is stripped,
+  so `{ name }` binds `$name`.
+- Object and array parameter values are `JSON.stringify`-ed on input. Output is
+  not parsed — call `JSON.parse()` yourself.
+
+```sql
+-- PREP: addUser
+INSERT INTO users (name, meta) VALUES ($name, $meta);
+
+-- PREP: searchUsers
+SELECT * FROM users WHERE name REGEXP $pattern;
+```
+
+### bigint reads
+
+Integer columns are read as JS `number` by default; a value above `2^53 − 1`
+throws on read rather than losing precision. Append the `bigint` flag to a
+`-- PREP` tag to read that statement's integer columns as `BigInt` instead:
+
+```sql
+-- PREP: feeBalance bigint
+SELECT SUM(amount) AS total FROM ledger WHERE account = $account;
+```
+
+The flag is scoped to that one statement. The returned value is a `BigInt`
+(`typeof total === "bigint"`): arithmetic cannot mix `BigInt` and `number`, and
+`JSON.stringify` throws on `BigInt` (supply a replacer). For a connection-wide
+default, pass `readBigInts: true` in options (it passes through to
+`DatabaseSync`). Passing a `BigInt` as a parameter already works without the
+flag.
+
+## EXEC (trusted SQL)
+
+`-- EXEC` runs `db.exec()` (one or more statements) after `$var` templating. It
+is for developer-authored SQL with constant or developer-supplied inputs —
+DDL, `PRAGMA`s, maintenance. It is **not** a parameterized path: templated values
+are string-interpolated (string values are single-quote escaped; numbers,
+booleans, and `null` are inlined; identifiers are not handled). Do not pass
+untrusted input through EXEC. For runtime values, use `-- PREP` with `.run()`.
+
+```sql
+-- EXEC: insertKv
+INSERT INTO kv (key, val) VALUES ($key, $val);
+```
 
 ```javascript
-const sql = await SqlRite.open({
-  dir: [
-    "migrations",      // Global schema (001-base.sql, 002-auth.sql)
-    "src/users",       // Local logic (003-users-view.sql, users.sql)
-    "src/billing"      // Local logic (billing.sql)
-  ]
-});
+sql.insertKv({ key: "role", val: "admin" }); // val is escaped, not bound
 ```
 
-SqlRite merges these folders into a single, sorted execution plan, allowing for both centralized management and Locality of Behavior.
+## Transactions
 
----
-
-## ⚡ Features & Syntax
-
-### Prefix-Agnostic Interface
-While SQL requires prefixes (`$`, `:`, or `@`) to identify parameters, SqlRite abstracts this away for the JavaScript consumer. You can pass clean object keys, and the library handles the mapping automatically.
-
-### 🛡️ Type Generation (Codegen)
-SqlRite includes a built-in codegen tool to provide precise TypeScript definitions for your dynamically generated methods.
-
-```bash
-# Generate SqlRite.d.ts from your SQL files
-npm run build:types
-```
-
-This enables full LSP support (autocomplete and parameter hints) in your IDE, even for runtime-generated objects.
-
----
-
-## 🤖 LLM-Ready Architecture
-
-In the era of AI-assisted engineering, **Context is King**. 
-
-SqlRite's "SQL-First" approach is specifically designed to maximize the effectiveness of LLMs:
-
-*   **High Signal-to-Noise**: When you feed a `.sql` file to an LLM, it sees 100% schema and logic, 0% Javascript boilerplate.
-*   **LLM Reference**: See [LLMS.md](./LLMS.md) for a high-signal "contract" that AI agents can use to understand and implement your data layer.
-*   **Schema Awareness**: Agents can instantly "understand" your entire database contract by reading isolated SQL files.
-
----
-
-## 💎 Features & Syntax
-
-### Modern Defaults
-
-SqlRite automatically executes these PRAGMAs on every connection to ensure high performance and data integrity:
-
-*   **WAL Mode**: `PRAGMA journal_mode = WAL` enables concurrent readers and writers.
-*   **Foreign Keys**: `PRAGMA foreign_keys = ON` enforces relational constraints.
-*   **DML Strict Mode**: `PRAGMA dml_strict = ON` catches common SQL errors (like using double quotes for strings).
-*   **REGEXP**: Registers a `REGEXP` function (V8 JIT-compiled) so `WHERE col REGEXP $pattern` works out of the box. Patterns are cached per connection.
-*   **uuid()**: Registers a `uuid()` function (`crypto.randomUUID()`) for use in defaults and queries (e.g., `DEFAULT (uuid())`).
-
-
-### Metadata Headers
-
-| Syntax | Name | Behavior |
-| :--- | :--- | :--- |
-| `-- INIT: name` | **Initializer** | Runs once automatically when `SqlRite` is instantiated. Supports `$variable` templating via the `params` option. |
-| `-- EXEC: name` | **Transaction** | Exposes a method `sql.name(params)` for SQL execution with optional `$variable` templating. |
-| `-- PREP: name` | **Statement** | Compiles a Prepared Statement; exposes `.all()`, `.get()`, and `.run()`. |
-
-### Locality & Multi-Directory Support
-
-You don't have to put all your SQL in one folder. SqlRite encourages placing SQL files exactly where they are needed:
+`transaction(calls)` runs a list of `-- PREP` statements atomically: it issues
+`BEGIN`, runs each call with bound parameters, then `COMMIT`; any error triggers
+`ROLLBACK` and the error is rethrown (async: rejects). It is the bound,
+runtime-safe primitive — the values are parameters, not interpolated. In the
+async facade the whole batch is one Worker round-trip.
 
 ```javascript
-const sql = new SqlRite({
-  dir: ["src/auth", "src/billing", "src/shared/sql"]
-});
+await sql.transaction([
+  { name: "debit",  params: { id: from, amt } },
+  { name: "credit", params: { id: to,   amt } },
+]);
+// both commit, or neither does
 ```
 
-Files are sorted **numerically by filename prefix** across all directories (e.g., `001-setup.sql` will always run before `002-seed.sql`), ensuring deterministic migrations.
+Each call is `{ name, params, mode }`. `name` must be a `-- PREP` statement
+(an unknown name throws and rolls back); `mode` is `"run"` (default), `"get"`,
+or `"all"`. `transaction` returns the array of per-call results. Only `-- PREP`
+statements participate; `-- EXEC` is the templated, non-transactional path.
 
----
+## INIT templating
 
-## ⚙️ Configuration
+`-- INIT` blocks support `$var` substitution from the `params` option (same
+templating rules as EXEC).
+
+```sql
+-- INIT: configure
+PRAGMA cache_size = $cacheSize;
+```
+
+```javascript
+await SqlRite.open({ dir: "sql", params: { cacheSize: 5000 } });
+```
+
+## Configuration
 
 | Option | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `path` | `string` | `":memory:"` | Path to the SQLite database file. |
-| `dir` | `string\|string[]` | `"sql"` | Directory or directories to scan for `.sql` files. |
-| `functions` | `string\|string[]` | — | Module path(s) to custom SQL function files. |
-| `params` | `object` | — | Key-value pairs for `$variable` substitution in `INIT` blocks. |
+| :-- | :-- | :-- | :-- |
+| `path` | `string` | `":memory:"` | SQLite database file path. |
+| `dir` | `string \| string[]` | `"sql"` | Directories scanned for `.sql` files. |
+| `functions` | `string \| string[]` | — | Module paths for custom SQL functions. |
+| `params` | `object` | — | `$var` substitutions for `-- INIT` blocks. |
 
-### Custom SQL Functions
+All other keys pass through to the `node:sqlite` `DatabaseSync` constructor
+(e.g. `readOnly`, `timeout`, `allowExtension`). Unknown keys are ignored;
+invalid option types throw at construction.
 
-Register custom SQL functions by pointing to JS modules. Each module's filename becomes the SQL function name.
+### Connection posture
+
+SqlRite applies these via `PRAGMA` on every connection: `journal_mode = WAL`,
+`synchronous = NORMAL`.
+
+It also sets these `DatabaseSync` options, each overridable by passing the same
+key in your own options:
+
+| Option | SqlRite default | Effect |
+| :-- | :-- | :-- |
+| `enableForeignKeyConstraints` | `true` | Enforces foreign keys. |
+| `enableDoubleQuotedStringLiterals` | `false` | Rejects double-quoted string literals (a misspelled `"identifier"` errors instead of becoming a string). |
+| `defensive` | `true` | Blocks SQL that can corrupt the file: `writable_schema`, `journal_mode=OFF`, `schema_version`, shadow-table writes. |
+
+## Built-in SQL functions
+
+- `REGEXP` — `col REGEXP $pattern` using JavaScript `RegExp`. Compiled patterns
+  are cached per connection. A `NULL` subject yields no match.
+- `uuid()` — `crypto.randomUUID()`. Usable as a column default: `id TEXT PRIMARY KEY DEFAULT (uuid())`.
+
+## Custom SQL functions
+
+Point `functions` at JS modules. Each module's filename becomes the SQL function
+name. Functions are registered before any SQL block loads, so they are available
+in `-- INIT` and prepared statements. Modules resolve dependencies from the
+host app's `node_modules`.
 
 ```javascript
 // db/getTokens.js
-import { encode } from "tiktoken";
-export const deterministic = true;
-export default (text) => encode(text).length;
+export const deterministic = true;   // optional; enables query optimization
+export default (text) => text.length; // required; the handler
 ```
 
 ```javascript
-const sql = await SqlRite.open({
-  dir: "sql",
-  functions: ["./db/getTokens.js"],
-});
+const sql = await SqlRite.open({ dir: "sql", functions: ["./db/getTokens.js"] });
 ```
 
 ```sql
@@ -216,13 +229,36 @@ const sql = await SqlRite.open({
 SELECT * FROM posts WHERE getTokens(body) > 1000;
 ```
 
-The module contract:
-*   **Default export** (required): The handler function.
-*   **`deterministic` named export** (optional): Set to `true` to allow SQLite query optimization.
-*   **Filename**: Becomes the SQL function name (e.g., `getTokens.js` → `getTokens()`).
+## Type generation
 
----
+```bash
+node scripts/codegen.js [dir]   # writes SqlRite.d.ts
+```
 
-## 📄 License
+Generates TypeScript declarations for the dynamically generated methods from the
+`.sql` files in `dir` (default `"sql"`).
+
+## Known limits
+
+- Integer columns are read as JS `number` unless a statement opts into `BigInt`
+  (see [bigint reads](#bigint-reads)); without it, a value above `2^53 − 1`
+  throws on read rather than losing precision.
+- `transaction()` composes `-- PREP` statements only. `-- EXEC` and `-- INIT`
+  are templated, not bound, and do not participate in `transaction()`.
+- The async facade processes one Worker message at a time; calls are serialized,
+  not concurrent.
+
+## Agent operations
+
+- Discover methods: grep for `-- PREP:` / `-- EXEC:`.
+- Discover schema: grep for `-- INIT:`.
+- Add an operation: add a tagged block to a `.sql` file, then call
+  `db.<name>` (run `codegen.js` to refresh types).
+- Bind runtime values with `-- PREP` + an object of named parameters; never
+  interpolate untrusted input through `-- EXEC`.
+- Group dependent writes with `transaction([{ name, params }, …])` for atomicity.
+- Read integers beyond `2^53` with a `bigint`-flagged `-- PREP`.
+
+## License
 
 MIT © [@wikitopian](https://github.com/wikitopian)

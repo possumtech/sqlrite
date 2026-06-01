@@ -1,0 +1,22 @@
+{
+	"compilerOptions": {
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"target": "esnext",
+		"lib": ["esnext"],
+		"types": ["node"],
+		"checkJs": true,
+		"allowJs": true,
+		"noEmit": true,
+		"strict": true,
+		"noImplicitAny": false,
+		"skipLibCheck": true
+	},
+	"include": [
+		"SqlRite.js",
+		"SqlRiteSync.js",
+		"SqlRiteCore.js",
+		"SqlWorker.js",
+		"scripts/codegen.js"
+	]
+}

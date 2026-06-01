@@ -6,13 +6,20 @@ const INTERNAL = Symbol("SqlRiteInternal");
 export { SqlRiteSync };
 
 export default class SqlRite {
-	#worker = null;
+	/** @type {import("node:worker_threads").Worker} */
+	#worker;
 	#id = 0;
+	/** @type {Map<number, { resolve: (value: unknown) => void, reject: (reason?: unknown) => void }>} */
 	#promises = new Map();
-	#readyPromise = null;
+	/** @type {Promise<SqlRite>} */
+	#readyPromise;
 	#closed = false;
-	#protected = new Set(["close", "constructor", "ready"]);
+	#protected = new Set(["close", "constructor", "ready", "transaction"]);
 
+	/**
+	 * @param {import("./SqlRiteCore.js").SqlRiteOptions} [options]
+	 * @param {symbol} [token]
+	 */
 	constructor(options = {}, token) {
 		if (token !== INTERNAL) {
 			throw new Error("SqlRite must be initialized using SqlRite.open(options)");
@@ -98,14 +105,18 @@ export default class SqlRite {
 		}
 	}
 
-	async #callWorker(type, name, params) {
+	async #callWorker(type, name, params, extra) {
 		if (this.#closed) throw new Error("SqlRite instance is closed");
 		await this.#readyPromise;
 		const { promise, resolve, reject } = Promise.withResolvers();
 		const id = this.#id++;
 		this.#promises.set(id, { resolve, reject });
-		this.#worker.postMessage({ id, type, name, params });
+		this.#worker.postMessage({ id, type, name, params, ...extra });
 		return promise;
+	}
+
+	transaction(calls) {
+		return this.#callWorker("TRANSACTION", null, null, { calls });
 	}
 
 	async close() {

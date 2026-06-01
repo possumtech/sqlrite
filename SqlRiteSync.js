@@ -1,21 +1,26 @@
-import { DatabaseSync } from "node:sqlite";
 import SqlRiteCore from "./SqlRiteCore.js";
 
 export default class SqlRiteSync {
-	#db = null;
+	/** @type {import("node:sqlite").DatabaseSync} */
+	#db;
 	#stmts = new Map();
-	#protected = new Set(["close", "open", "constructor"]);
+	#protected = new Set(["close", "open", "constructor", "transaction"]);
 
+	/**
+	 * @param {import("./SqlRiteCore.js").SqlRiteOptions} [options]
+	 * @param {import("node:sqlite").DatabaseSync} [db]
+	 */
 	constructor(options = {}, db) {
 		const merged = { path: ":memory:", dir: "sql", ...options };
-		this.#db = db ?? new DatabaseSync(merged.path, merged);
+		this.#db = db ?? SqlRiteCore.openDb(merged);
 		if (!db) SqlRiteCore.initDb(this.#db);
 		this.#setupChunks(merged);
 	}
 
+	/** @param {import("./SqlRiteCore.js").SqlRiteOptions} [options] */
 	static async open(options = {}) {
 		const merged = { path: ":memory:", dir: "sql", ...options };
-		const db = new DatabaseSync(merged.path, merged);
+		const db = SqlRiteCore.openDb(merged);
 		SqlRiteCore.initDb(db);
 		await SqlRiteCore.registerFunctions(db, merged.functions);
 		return new SqlRiteSync(merged, db);
@@ -36,6 +41,7 @@ export default class SqlRiteSync {
 		for (const prep of chunks.PREP) {
 			if (this.#protected.has(prep.name)) continue;
 			const stmt = this.#db.prepare(prep.sql);
+			if (prep.bigint) stmt.setReadBigInts(true);
 			this.#stmts.set(prep.name, stmt);
 
 			this[prep.name] = {
@@ -43,6 +49,22 @@ export default class SqlRiteSync {
 				get: (params = {}) => stmt.get(SqlRiteCore.jsonify(params)),
 				run: (params = {}) => stmt.run(SqlRiteCore.jsonify(params)),
 			};
+		}
+	}
+
+	transaction(calls) {
+		this.#db.exec("BEGIN");
+		try {
+			const results = calls.map(({ name, params, mode = "run" }) => {
+				const stmt = this.#stmts.get(name);
+				if (!stmt) throw new Error(`SqlRite: no PREP statement named "${name}"`);
+				return stmt[mode](SqlRiteCore.jsonify(params));
+			});
+			this.#db.exec("COMMIT");
+			return results;
+		} catch (error) {
+			this.#db.exec("ROLLBACK");
+			throw error;
 		}
 	}
 

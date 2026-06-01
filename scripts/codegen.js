@@ -29,6 +29,12 @@ function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
 		"	lastInsertRowid: number | bigint;",
 		"}",
 		"",
+		"export interface SqlRiteTxCall {",
+		"	name: string;",
+		"	params?: Record<string, unknown>;",
+		'	mode?: "run" | "get" | "all";',
+		"}",
+		"",
 		"export interface SqlRitePreparedStatements<T = Record<string, unknown>, P = Record<string, unknown>> {",
 		"	all(params?: P): Promise<T[]>;",
 		"	get(params?: P): Promise<T | undefined>;",
@@ -43,6 +49,7 @@ function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
 		"",
 		"export class SqlRiteSync {",
 		"	constructor(options?: SqlRiteOptions);",
+		"	transaction(calls: SqlRiteTxCall[]): unknown[];",
 		"	close(): void;",
 	];
 
@@ -57,6 +64,7 @@ function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
 	lines.push("	private constructor(options?: SqlRiteOptions, token?: symbol);");
 	lines.push("	static open(options?: SqlRiteOptions): Promise<SqlRite>;");
 	lines.push("	ready(): Promise<SqlRite>;");
+	lines.push("	transaction(calls: SqlRiteTxCall[]): Promise<unknown[]>;");
 	lines.push("	close(): Promise<void>;");
 
 	for (const exec of chunks.EXEC) {
