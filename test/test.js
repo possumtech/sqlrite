@@ -188,6 +188,44 @@ test("REGEXP function", () => {
 	fs.rmSync("sql_regex", { recursive: true, force: true });
 });
 
+test("REGEXP inline flags", () => {
+	if (!fs.existsSync("sql_regex_flags")) fs.mkdirSync("sql_regex_flags");
+	fs.writeFileSync(
+		"sql_regex_flags/001.sql",
+		"-- INIT: createItems\nCREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT;\n" +
+			"-- PREP: addItem\nINSERT INTO items (name) VALUES ($name);\n" +
+			"-- PREP: findByRegex\nSELECT name FROM items WHERE name REGEXP $pattern ORDER BY name;",
+	);
+
+	const sql = new SqlRiteSync({ dir: "sql_regex_flags" });
+	sql.addItem.run({ name: "Alice" });
+	sql.addItem.run({ name: "alicia" });
+	sql.addItem.run({ name: "BOB" });
+
+	const names = (pattern) => sql.findByRegex.all({ pattern }).map((r) => r.name);
+
+	// default is case-sensitive: only lowercase "alicia" starts with "ali"
+	assert.deepStrictEqual(names("^ali"), ["alicia"]);
+	// (?i) makes it case-insensitive: "Alice" (binary-sorts first) and "alicia"
+	assert.deepStrictEqual(names("(?i)^ali"), ["Alice", "alicia"]);
+	// multiple flags parse together
+	assert.deepStrictEqual(names("(?im)^bob$"), ["BOB"]);
+	// a native non-capturing group is not mistaken for a flag prefix
+	assert.deepStrictEqual(names("(?:al)ic"), ["alicia"]);
+	// g is inert for a boolean match (lastIndex reset each row): identical to no flag
+	assert.deepStrictEqual(names("(?g)ali"), names("ali"));
+	// y (sticky) is pinned to position 0: "alicia" starts with "ali" -> matches
+	assert.deepStrictEqual(names("(?y)ali"), ["alicia"]);
+	// ...but "lic" is mid-string in both names, so sticky anchoring finds nothing
+	assert.deepStrictEqual(names("lic"), ["Alice", "alicia"]);
+	assert.deepStrictEqual(names("(?y)lic"), []);
+	// genuinely invalid flags still fail hard (RegExp constructor rejects them)
+	assert.throws(() => names("(?z)ali"), /Invalid flags/);
+
+	sql.close();
+	fs.rmSync("sql_regex_flags", { recursive: true, force: true });
+});
+
 test("uuid() function", () => {
 	if (!fs.existsSync("sql_uuid")) fs.mkdirSync("sql_uuid");
 	fs.writeFileSync(

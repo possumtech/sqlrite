@@ -218,7 +218,12 @@ key in your own options:
 ## Built-in SQL functions
 
 - `REGEXP` — `col REGEXP $pattern` using JavaScript `RegExp`. Compiled patterns
-  are cached per connection. A `NULL` subject yields no match.
+  are cached per connection. A `NULL` subject yields no match. An optional
+  leading `(?flags)` sets RegExp flags — e.g. `(?i)^foo` for case-insensitive.
+  `lastIndex` is reset per row, so the stateful flags are deterministic: `g` is a
+  no-op (REGEXP is boolean) and `y` (sticky) anchors the match at the start.
+  Genuinely invalid flags still throw. A native scoped group such as `(?i:…)`
+  passes through unchanged.
 - `uuid()` — `crypto.randomUUID()`. Usable as a column default: `id TEXT PRIMARY KEY DEFAULT (uuid())`.
 
 ## Custom SQL functions

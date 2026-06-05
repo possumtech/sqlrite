@@ -30,6 +30,10 @@ export default class SqlRiteCore {
 	// Connection-scoped write metadata. Read via setReadBigInts so a rowid past 2^53 is lossless.
 	static #META_SQL = "SELECT last_insert_rowid() AS lastInsertRowid, changes() AS changes";
 
+	// Optional inline-flag prefix for REGEXP, e.g. `(?i)foo`. A native scoped group
+	// `(?i:...)` has a trailing colon, so it won't match here and passes through untouched.
+	static #REGEXP_FLAG_PREFIX = /^\(\?([a-z]+)\)/;
+
 	// Connection posture. Spread under user options, so callers can override any of these.
 	static #HARDENED = Object.freeze({
 		enableForeignKeyConstraints: true, // enforce relational constraints
@@ -55,9 +59,12 @@ export default class SqlRiteCore {
 				if (string === null) return 0;
 				let re = regexCache.get(pattern);
 				if (!re) {
-					re = new RegExp(pattern);
+					re = SqlRiteCore.#compileRegExp(pattern);
 					regexCache.set(pattern, re);
 				}
+				// REGEXP is boolean over a cached, reused RegExp, so neutralize the stateful
+				// flags each row: `g` becomes a no-op and `y` (sticky) anchors at the start.
+				re.lastIndex = 0;
 				return re.test(string) ? 1 : 0;
 			});
 		}
@@ -92,6 +99,18 @@ export default class SqlRiteCore {
 		} catch {
 			return false;
 		}
+	}
+
+	/**
+	 * Compile a REGEXP pattern, honoring an optional leading `(?flags)` prefix.
+	 * Invalid flags throw via the RegExp constructor; stateful flags are tamed at call time.
+	 * @param {string} pattern
+	 * @returns {RegExp}
+	 */
+	static #compileRegExp(pattern) {
+		const match = SqlRiteCore.#REGEXP_FLAG_PREFIX.exec(pattern);
+		const flags = match ? match[1] : "";
+		return new RegExp(match ? pattern.slice(match[0].length) : pattern, flags);
 	}
 
 	/**
