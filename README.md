@@ -94,6 +94,10 @@ A `-- PREP` method exposes three modes:
   so `{ name }` binds `$name`.
 - Object and array parameter values are `JSON.stringify`-ed on input. Output is
   not parsed — call `JSON.parse()` yourself.
+- `.run()` returns `{ changes, lastInsertRowid }`. `-- EXEC` and `-- TX` return
+  the same shape. Both fields are `number` by default and `BigInt` when the
+  statement carries the [`bigint`](#bigint-reads) flag — without it, a
+  `lastInsertRowid` past `2^53` throws rather than rounding.
 
 ```sql
 -- PREP: addUser
@@ -105,17 +109,21 @@ SELECT * FROM users WHERE name REGEXP $pattern;
 
 ### bigint reads
 
-Integer columns are read as JS `number` by default; a value above `2^53 − 1`
-throws on read rather than losing precision. Append the `bigint` flag to a
-`-- PREP` tag to read that statement's integer columns as `BigInt` instead:
+Integers are read as JS `number` by default; a value above `2^53 − 1` throws on
+read rather than losing precision. Append the `bigint` flag to a tag to read that
+statement's integers as `BigInt` instead:
 
 ```sql
 -- PREP: feeBalance bigint
 SELECT SUM(amount) AS total FROM ledger WHERE account = $account;
 ```
 
-The flag is scoped to that one statement. The returned value is a `BigInt`
-(`typeof total === "bigint"`): arithmetic cannot mix `BigInt` and `number`, and
+The flag is the single switch for *all* of a statement's integer output, scoped
+to that one statement: result columns for `-- PREP`, and the
+`{ changes, lastInsertRowid }` write metadata returned by `-- PREP` `.run()`,
+`-- EXEC`, and `-- TX`. Flagged → every integer comes back `BigInt`; unflagged →
+`number`, and anything past `2^53` throws. A flagged value is a `BigInt`
+(`typeof === "bigint"`): arithmetic cannot mix `BigInt` and `number`, and
 `JSON.stringify` throws on `BigInt` (supply a replacer). For a connection-wide
 default, pass `readBigInts: true` in options (it passes through to
 `DatabaseSync`). Passing a `BigInt` as a parameter already works without the
@@ -137,28 +145,34 @@ INSERT INTO kv (key, val) VALUES ($key, $val);
 
 ```javascript
 sql.insertKv({ key: "role", val: "admin" }); // val is escaped, not bound
+// returns { changes, lastInsertRowid } — number, or BigInt with the `bigint` flag
 ```
 
-## Transactions
+## TX (transactions)
 
-`transaction(calls)` runs a list of `-- PREP` statements atomically: it issues
-`BEGIN`, runs each call with bound parameters, then `COMMIT`; any error triggers
-`ROLLBACK` and the error is rethrown (async: rejects). It is the bound,
-runtime-safe primitive — the values are parameters, not interpolated. In the
-async facade the whole batch is one Worker round-trip.
+`-- TX` is `-- EXEC` made transactional: the templated multi-statement body runs
+wrapped in `BEGIN` / `COMMIT`, and any error triggers `ROLLBACK` before the error
+is rethrown (async: rejects). The whole transaction lives in one SQL block — there
+is no JS composition step. In the async facade it is one Worker round-trip.
+
+```sql
+-- TX: transfer
+UPDATE acct SET bal = bal - $amt WHERE id = $from;
+UPDATE acct SET bal = bal + $amt WHERE id = $to;
+```
 
 ```javascript
-await sql.transaction([
-  { name: "debit",  params: { id: from, amt } },
-  { name: "credit", params: { id: to,   amt } },
-]);
-// both commit, or neither does
+sql.transfer({ from, to, amt }); // both statements commit, or neither does
 ```
 
-Each call is `{ name, params, mode }`. `name` must be a `-- PREP` statement
-(an unknown name throws and rolls back); `mode` is `"run"` (default), `"get"`,
-or `"all"`. `transaction` returns the array of per-call results. Only `-- PREP`
-statements participate; `-- EXEC` is the templated, non-transactional path.
+Templating is identical to `-- EXEC` — values are string-interpolated, **not**
+bound — so the same trusted-input contract applies; do not pass untrusted input
+through `-- TX`. A `-- TX` method returns the write metadata
+`{ changes, lastInsertRowid }` (`number`, or `BigInt` with the
+[`bigint`](#bigint-reads) flag). Because the body is run via `db.exec()`, it
+cannot return result rows: keep intra-transaction data flow in SQL
+(`last_insert_rowid()`, subqueries) and read committed results with a separate
+`-- PREP` afterward.
 
 ## INIT templating
 
@@ -243,20 +257,21 @@ Generates TypeScript declarations for the dynamically generated methods from the
 - Integer columns are read as JS `number` unless a statement opts into `BigInt`
   (see [bigint reads](#bigint-reads)); without it, a value above `2^53 − 1`
   throws on read rather than losing precision.
-- `transaction()` composes `-- PREP` statements only. `-- EXEC` and `-- INIT`
-  are templated, not bound, and do not participate in `transaction()`.
+- `-- TX` is templated, not bound (same contract as `-- EXEC`), and cannot
+  return result rows — it returns only `{ changes, lastInsertRowid }`. Read
+  committed results with a separate `-- PREP` afterward.
 - The async facade processes one Worker message at a time; calls are serialized,
   not concurrent.
 
 ## Agent operations
 
-- Discover methods: grep for `-- PREP:` / `-- EXEC:`.
+- Discover methods: grep for `-- PREP:` / `-- EXEC:` / `-- TX:`.
 - Discover schema: grep for `-- INIT:`.
 - Add an operation: add a tagged block to a `.sql` file, then call
   `db.<name>` (run `codegen.js` to refresh types).
 - Bind runtime values with `-- PREP` + an object of named parameters; never
   interpolate untrusted input through `-- EXEC`.
-- Group dependent writes with `transaction([{ name, params }, …])` for atomicity.
+- Group dependent writes in a single `-- TX` block for atomicity.
 - Read integers beyond `2^53` with a `bigint`-flagged `-- PREP`.
 
 ## License

@@ -27,7 +27,7 @@ Tags: `-- INIT:` (auto-run DDL/pragma), `-- EXEC:` (string-templated exec), `-- 
 ### Phase 0 — Decisions (SETTLED)
 - [x] D1: **Hardened connection posture via passthrough.** A frozen `SqlRiteCore.#HARDENED` ({ enableForeignKeyConstraints:true, enableDoubleQuotedStringLiterals:false, defensive:true }) spread *under* user options. `SqlRiteCore.openDb(options)` constructs the DB once; all sites call it. Verified: `DatabaseSync` tolerates unknown keys (dir/functions/params pass through), throws on bad option types (fail-hard), user options override HARDENED. No allowlist maintained — only the three deviations.
 - [x] D2: **EXEC = reframe docs only** (no identifier marker this round). Drop the false "Transaction" label + broken identifier example. State trusted-SQL-only contract; PREP is the only value-parameterized path.
-- [ ] D3: Transaction primitive — **DEFERRED** pending explicit go/no-go (shape: declarative `-- TX:` vs batch API).
+- [x] D3: Transaction primitive — **RESOLVED: declarative `-- TX:`.** `-- EXEC` made transactional (BEGIN/COMMIT/ROLLBACK around a templated body). Composition stays in the `.sql` file — no JS batch/call-list API. Templated like EXEC (trusted input); returns write metadata, not rows. The earlier batch-API `transaction(calls)` was removed.
 - [ ] D4: BigInt / issue #6 — **DEFERRED** pending explicit go/no-go (shape: per-PREP marker vs per-instance option). README states current 2^53 read behavior accurately meanwhile.
 
 ### Phase 1 — Hardened posture (do now)
@@ -45,8 +45,9 @@ Tags: `-- INIT:` (auto-run DDL/pragma), `-- EXEC:` (string-templated exec), `-- 
 - [ ] `npm run check` (lint + test) green; coverage >=80/80/80.
 
 ### Phase 5 — Transactions (D3, DONE)
-- [x] Batch API `transaction(calls)` — bound PREPs, atomic (BEGIN/COMMIT/ROLLBACK). Sync + async (one worker round-trip). `{name,params,mode}`, mode∈run/get/all. Unknown name throws+rollback. No templated `-- TX:` tag (coherence: binding is a prepared-statement capability, not a per-tag policy; exec() can't bind).
-- [x] `transaction` protected on both facades; codegen emits it + `SqlRiteTxCall`.
+- [x] Declarative `-- TX:` tag — templated multi-statement body run via `db.exec()` wrapped in BEGIN/COMMIT, ROLLBACK+rethrow on error. Sync + async (one worker round-trip). Generated as a method like EXEC. The whole transaction is one SQL block; no JS composition.
+- [x] Removed the injected batch API `transaction(calls)` (method, `TRANSACTION` worker type, `#protected` reservation, codegen `SqlRiteTxCall`) — it expressed transaction composition in JS, off-paradigm. Superseded by `-- TX:`.
+- [x] EXEC, TX, and `PREP .run()` return write metadata `{ changes, lastInsertRowid }` via `SqlRiteCore.prepareMeta`/`result` (a read of `last_insert_rowid()`/`changes()`). The per-statement `bigint` flag is the single switch for *all* integer output: flagged → both fields `BigInt` (lossless past 2^53); unflagged → `number`, and a rowid past 2^53 throws rather than rounding (same no-silent-loss contract as columns). Two cached meta statements per connection (`setReadBigInts` on/off), selected per chunk flag. Codegen emits `SqlRiteResult`/`SqlRiteBigIntResult` (+ prepared-statement variants) per flag.
 
 ### Phase 6 — BigInt / issue #6 (D4, DONE)
 - [x] Per-PREP `bigint` flag → `stmt.setReadBigInts(true)`. Parser captures trailing flags (also fixes latent trailing-text-leaks-into-SQL bug). Sync + async (BigInt survives structured clone). `readBigInts` passes through for connection-wide default.

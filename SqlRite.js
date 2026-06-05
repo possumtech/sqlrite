@@ -14,7 +14,7 @@ export default class SqlRite {
 	/** @type {Promise<SqlRite>} */
 	#readyPromise;
 	#closed = false;
-	#protected = new Set(["close", "constructor", "ready", "transaction"]);
+	#protected = new Set(["close", "constructor", "ready"]);
 
 	/**
 	 * @param {import("./SqlRiteCore.js").SqlRiteOptions} [options]
@@ -95,6 +95,10 @@ export default class SqlRite {
 			if (this.#protected.has(name)) continue;
 			this[name] = (params) => this.#callWorker("EXEC", name, params);
 		}
+		for (const name of names.TX) {
+			if (this.#protected.has(name)) continue;
+			this[name] = (params) => this.#callWorker("TX", name, params);
+		}
 		for (const name of names.PREP) {
 			if (this.#protected.has(name)) continue;
 			this[name] = {
@@ -105,18 +109,14 @@ export default class SqlRite {
 		}
 	}
 
-	async #callWorker(type, name, params, extra) {
+	async #callWorker(type, name, params) {
 		if (this.#closed) throw new Error("SqlRite instance is closed");
 		await this.#readyPromise;
 		const { promise, resolve, reject } = Promise.withResolvers();
 		const id = this.#id++;
 		this.#promises.set(id, { resolve, reject });
-		this.#worker.postMessage({ id, type, name, params, ...extra });
+		this.#worker.postMessage({ id, type, name, params });
 		return promise;
-	}
-
-	transaction(calls) {
-		return this.#callWorker("TRANSACTION", null, null, { calls });
 	}
 
 	async close() {

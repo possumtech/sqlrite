@@ -13,17 +13,22 @@ import { DatabaseSync } from "node:sqlite";
 
 /**
  * @typedef {object} Chunk
- * @property {string} type INIT, EXEC, or PREP.
+ * @property {string} type INIT, EXEC, TX, or PREP.
  * @property {string} name Tag name.
  * @property {string} sql Block body.
  * @property {boolean} [bigint] PREP only: read integer columns as BigInt.
  */
 
-/** @typedef {{ INIT: Chunk[], EXEC: Chunk[], PREP: Chunk[] }} Chunks */
+/** @typedef {{ INIT: Chunk[], EXEC: Chunk[], TX: Chunk[], PREP: Chunk[] }} Chunks */
+
+/** @typedef {{ changes: number|bigint, lastInsertRowid: number|bigint }} SqlRiteResult */
 
 export default class SqlRiteCore {
 	// Captures: 1=type, 2=name, 3=trailing flags (rest of the tag line, e.g. "bigint").
-	static #CHUNK_REGEX = /^--\s*(INIT|EXEC|PREP):\s*(\w+)(.*)$/gim;
+	static #CHUNK_REGEX = /^--\s*(INIT|EXEC|TX|PREP):\s*(\w+)(.*)$/gim;
+
+	// Connection-scoped write metadata. Read via setReadBigInts so a rowid past 2^53 is lossless.
+	static #META_SQL = "SELECT last_insert_rowid() AS lastInsertRowid, changes() AS changes";
 
 	// Connection posture. Spread under user options, so callers can override any of these.
 	static #HARDENED = Object.freeze({
@@ -118,7 +123,7 @@ export default class SqlRiteCore {
 	 */
 	static parseSql(files) {
 		/** @type {Chunks} */
-		const chunks = { INIT: [], EXEC: [], PREP: [] };
+		const chunks = { INIT: [], EXEC: [], TX: [], PREP: [] };
 		/** @type {Map<string, { type: string, file: string }>} */
 		const seen = new Map();
 
@@ -164,6 +169,26 @@ export default class SqlRiteCore {
 			if (typeof value === "boolean") return value ? "1" : "0";
 			return `'${String(value).replace(/'/g, "''")}'`;
 		});
+	}
+
+	/**
+	 * @param {import("node:sqlite").DatabaseSync} db
+	 * @param {boolean} bigint Read the metadata integers as BigInt (lossless past 2^53).
+	 * @returns {import("node:sqlite").StatementSync}
+	 */
+	static prepareMeta(db, bigint) {
+		const stmt = db.prepare(SqlRiteCore.#META_SQL);
+		if (bigint) stmt.setReadBigInts(true);
+		return stmt;
+	}
+
+	/**
+	 * @param {import("node:sqlite").StatementSync} metaStmt
+	 * @returns {SqlRiteResult}
+	 */
+	static result(metaStmt) {
+		const { changes, lastInsertRowid } = /** @type {any} */ (metaStmt.get());
+		return { changes, lastInsertRowid };
 	}
 
 	static jsonify(params) {

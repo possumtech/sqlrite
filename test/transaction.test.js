@@ -11,66 +11,63 @@ before(() => {
 		`${DIR}/001.sql`,
 		"-- INIT: t\nCREATE TABLE acct (id INTEGER PRIMARY KEY, bal INTEGER NOT NULL CHECK (bal >= 0)) STRICT;\n" +
 			"-- INIT: seed\nINSERT INTO acct (id, bal) VALUES (1, 100), (2, 0);\n" +
-			"-- PREP: debit\nUPDATE acct SET bal = bal - $amt WHERE id = $id;\n" +
-			"-- PREP: credit\nUPDATE acct SET bal = bal + $amt WHERE id = $id;\n" +
+			"-- INIT: log\nCREATE TABLE log (id INTEGER PRIMARY KEY, msg TEXT) STRICT;\n" +
+			"-- TX: transfer\nUPDATE acct SET bal = bal - $amt WHERE id = $from;\nUPDATE acct SET bal = bal + $amt WHERE id = $to;\n" +
+			"-- TX: logTwice\nINSERT INTO log (msg) VALUES ($a);\nINSERT INTO log (msg) VALUES ($b);\n" +
+			"-- TX: logTwiceBig bigint\nINSERT INTO log (msg) VALUES ($a);\nINSERT INTO log (msg) VALUES ($b);\n" +
 			"-- PREP: bal\nSELECT bal FROM acct WHERE id = $id;",
 	);
 });
 
 after(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
-describe("transaction (sync)", () => {
-	test("commits all calls atomically", () => {
+describe("-- TX: (sync)", () => {
+	test("commits the whole body atomically", () => {
 		const sql = new SqlRiteSync({ dir: DIR });
-		const results = sql.transaction([
-			{ name: "debit", params: { id: 1, amt: 30 } },
-			{ name: "credit", params: { id: 2, amt: 30 } },
-		]);
-		assert.strictEqual(results.length, 2);
-		assert.strictEqual(results[0].changes, 1);
+		sql.transfer({ from: 1, to: 2, amt: 30 });
 		assert.strictEqual(sql.bal.get({ id: 1 }).bal, 70);
 		assert.strictEqual(sql.bal.get({ id: 2 }).bal, 30);
 		sql.close();
 	});
 
-	test("rolls back every call when one fails", () => {
+	test("rolls back every statement when one fails", () => {
 		const sql = new SqlRiteSync({ dir: DIR });
 		assert.throws(
-			() =>
-				sql.transaction([
-					{ name: "debit", params: { id: 1, amt: 50 } }, // ok
-					{ name: "debit", params: { id: 1, amt: 9999 } }, // CHECK bal>=0 fails
-				]),
+			() => sql.transfer({ from: 1, to: 2, amt: 9999 }), // CHECK bal>=0 fails on the debit
 			/CHECK constraint failed/,
 		);
-		assert.strictEqual(sql.bal.get({ id: 1 }).bal, 100, "first debit must be rolled back");
+		assert.strictEqual(sql.bal.get({ id: 1 }).bal, 100, "debit must be rolled back");
+		assert.strictEqual(sql.bal.get({ id: 2 }).bal, 0, "credit must not have applied");
 		sql.close();
 	});
 
-	test("unknown statement name fails and rolls back", () => {
+	test("unflagged TX returns number metadata", () => {
 		const sql = new SqlRiteSync({ dir: DIR });
-		assert.throws(
-			() => sql.transaction([{ name: "nope", params: {} }]),
-			/no PREP statement named "nope"/,
-		);
+		const { changes, lastInsertRowid } = sql.logTwice({ a: "one", b: "two" });
+		assert.strictEqual(typeof changes, "number");
+		assert.strictEqual(changes, 1); // last INSERT affected one row
+		assert.strictEqual(typeof lastInsertRowid, "number");
+		assert.strictEqual(lastInsertRowid, 2);
 		sql.close();
 	});
 
-	test("mode get returns rows inside the transaction", () => {
+	test("bigint-flagged TX returns BigInt metadata", () => {
 		const sql = new SqlRiteSync({ dir: DIR });
-		const [row] = sql.transaction([{ name: "bal", params: { id: 1 }, mode: "get" }]);
-		assert.strictEqual(row.bal, 100);
+		const { changes, lastInsertRowid } = sql.logTwiceBig({ a: "one", b: "two" });
+		assert.strictEqual(typeof changes, "bigint");
+		assert.strictEqual(changes, 1n);
+		assert.strictEqual(typeof lastInsertRowid, "bigint");
+		assert.strictEqual(lastInsertRowid, 2n);
 		sql.close();
 	});
 });
 
-describe("transaction (async)", () => {
+describe("-- TX: (async)", () => {
 	test("commits atomically across the worker", async () => {
 		const sql = await SqlRite.open({ dir: DIR });
-		await sql.transaction([
-			{ name: "debit", params: { id: 1, amt: 40 } },
-			{ name: "credit", params: { id: 2, amt: 40 } },
-		]);
+		const { lastInsertRowid } = await sql.logTwiceBig({ a: "one", b: "two" });
+		assert.strictEqual(typeof lastInsertRowid, "bigint"); // BigInt survives the worker boundary
+		await sql.transfer({ from: 1, to: 2, amt: 40 });
 		assert.strictEqual((await sql.bal.get({ id: 1 })).bal, 60);
 		await sql.close();
 	});
@@ -78,11 +75,7 @@ describe("transaction (async)", () => {
 	test("rejects and rolls back on failure", async () => {
 		const sql = await SqlRite.open({ dir: DIR });
 		await assert.rejects(
-			() =>
-				sql.transaction([
-					{ name: "debit", params: { id: 1, amt: 10 } },
-					{ name: "debit", params: { id: 1, amt: 9999 } },
-				]),
+			() => sql.transfer({ from: 1, to: 2, amt: 9999 }),
 			/CHECK constraint failed/,
 		);
 		assert.strictEqual((await sql.bal.get({ id: 1 })).bal, 100);

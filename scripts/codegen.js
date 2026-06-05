@@ -26,13 +26,12 @@ function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
 		"",
 		"export interface SqlRiteResult {",
 		"	changes: number;",
-		"	lastInsertRowid: number | bigint;",
+		"	lastInsertRowid: number;",
 		"}",
 		"",
-		"export interface SqlRiteTxCall {",
-		"	name: string;",
-		"	params?: Record<string, unknown>;",
-		'	mode?: "run" | "get" | "all";',
+		"export interface SqlRiteBigIntResult {",
+		"	changes: bigint;",
+		"	lastInsertRowid: bigint;",
 		"}",
 		"",
 		"export interface SqlRitePreparedStatements<T = Record<string, unknown>, P = Record<string, unknown>> {",
@@ -41,37 +40,61 @@ function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
 		"	run(params?: P): Promise<SqlRiteResult>;",
 		"}",
 		"",
+		"export interface SqlRiteBigIntPreparedStatements<T = Record<string, unknown>, P = Record<string, unknown>> {",
+		"	all(params?: P): Promise<T[]>;",
+		"	get(params?: P): Promise<T | undefined>;",
+		"	run(params?: P): Promise<SqlRiteBigIntResult>;",
+		"}",
+		"",
 		"export interface SqlRiteSyncPreparedStatements<T = Record<string, unknown>, P = Record<string, unknown>> {",
 		"	all(params?: P): T[];",
 		"	get(params?: P): T | undefined;",
 		"	run(params?: P): SqlRiteResult;",
 		"}",
 		"",
+		"export interface SqlRiteSyncBigIntPreparedStatements<T = Record<string, unknown>, P = Record<string, unknown>> {",
+		"	all(params?: P): T[];",
+		"	get(params?: P): T | undefined;",
+		"	run(params?: P): SqlRiteBigIntResult;",
+		"}",
+		"",
 		"export class SqlRiteSync {",
 		"	constructor(options?: SqlRiteOptions);",
-		"	transaction(calls: SqlRiteTxCall[]): unknown[];",
 		"	close(): void;",
 	];
 
 	for (const exec of chunks.EXEC) {
-		lines.push(`	${exec.name}(): void;`);
+		const ret = exec.bigint ? "SqlRiteBigIntResult" : "SqlRiteResult";
+		lines.push(`	${exec.name}(params?: Record<string, unknown>): ${ret};`);
+	}
+	for (const tx of chunks.TX) {
+		const ret = tx.bigint ? "SqlRiteBigIntResult" : "SqlRiteResult";
+		lines.push(`	${tx.name}(params?: Record<string, unknown>): ${ret};`);
 	}
 	for (const prep of chunks.PREP) {
-		lines.push(`	${prep.name}: SqlRiteSyncPreparedStatements;`);
+		const iface = prep.bigint
+			? "SqlRiteSyncBigIntPreparedStatements"
+			: "SqlRiteSyncPreparedStatements";
+		lines.push(`	${prep.name}: ${iface};`);
 	}
 
 	lines.push("}", "", "export default class SqlRite {");
 	lines.push("	private constructor(options?: SqlRiteOptions, token?: symbol);");
 	lines.push("	static open(options?: SqlRiteOptions): Promise<SqlRite>;");
 	lines.push("	ready(): Promise<SqlRite>;");
-	lines.push("	transaction(calls: SqlRiteTxCall[]): Promise<unknown[]>;");
 	lines.push("	close(): Promise<void>;");
 
 	for (const exec of chunks.EXEC) {
-		lines.push(`	${exec.name}(): Promise<void>;`);
+		const ret = exec.bigint ? "SqlRiteBigIntResult" : "SqlRiteResult";
+		lines.push(`	${exec.name}(params?: Record<string, unknown>): Promise<${ret}>;`);
+	}
+	for (const tx of chunks.TX) {
+		const ret = tx.bigint ? "SqlRiteBigIntResult" : "SqlRiteResult";
+		lines.push(`	${tx.name}(params?: Record<string, unknown>): Promise<${ret}>;`);
 	}
 	for (const prep of chunks.PREP) {
-		lines.push(`	${prep.name}: SqlRitePreparedStatements;`);
+		const iface = prep.bigint ? "SqlRiteBigIntPreparedStatements" : "SqlRitePreparedStatements";
+		lines.push(`	${prep.name}: ${iface};`);
 	}
 
 	lines.push("}", "");

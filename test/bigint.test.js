@@ -12,6 +12,8 @@ before(() => {
 		`${DIR}/001.sql`,
 		"-- INIT: t\nCREATE TABLE ledger (amount INTEGER NOT NULL) STRICT;\n" +
 			"-- PREP: add\nINSERT INTO ledger (amount) VALUES ($amount);\n" +
+			"-- PREP: addAt bigint\nINSERT INTO ledger (rowid, amount) VALUES ($rowid, $amount);\n" +
+			"-- PREP: addAtNum\nINSERT INTO ledger (rowid, amount) VALUES ($rowid, $amount);\n" +
 			"-- PREP: total bigint\nSELECT SUM(amount) AS total FROM ledger;\n" +
 			"-- PREP: totalNum\nSELECT SUM(amount) AS total FROM ledger;",
 	);
@@ -26,6 +28,24 @@ describe("bigint marker (sync)", () => {
 		const { total } = sql.total.get();
 		assert.strictEqual(typeof total, "bigint");
 		assert.strictEqual(total, OVER_2_53);
+		sql.close();
+	});
+
+	test("a bigint-flagged run() returns lastInsertRowid as a lossless BigInt past 2^53", () => {
+		const sql = new SqlRiteSync({ dir: DIR });
+		const { changes, lastInsertRowid } = sql.addAt.run({ rowid: OVER_2_53, amount: 1 });
+		assert.strictEqual(typeof lastInsertRowid, "bigint");
+		assert.strictEqual(lastInsertRowid, OVER_2_53);
+		assert.strictEqual(changes, 1n);
+		sql.close();
+	});
+
+	test("an unflagged run() throws on a rowid past 2^53 (no silent loss)", () => {
+		const sql = new SqlRiteSync({ dir: DIR });
+		assert.throws(
+			() => sql.addAtNum.run({ rowid: OVER_2_53, amount: 1 }),
+			/too large to be represented/,
+		);
 		sql.close();
 	});
 
