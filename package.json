@@ -25,7 +25,8 @@
 		"SqlRiteSync.js",
 		"SqlRiteCore.js",
 		"SqlWorker.js",
-		"scripts/codegen.js"
+		"scripts/codegen.js",
+		"SPEC.md"
 	],
 	"exports": {
 		".": "./SqlRite.js",
