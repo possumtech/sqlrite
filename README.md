@@ -267,6 +267,14 @@ Generates TypeScript declarations for the dynamically generated methods from the
   committed results with a separate `-- PREP` afterward.
 - The async facade processes one Worker message at a time; calls are serialized,
   not concurrent.
+- `REGEXP` compiles patterns with JavaScript `RegExp`, which backtracks: a
+  malicious pattern (e.g. `(a+)+$`) — or attacker-controlled data against a
+  vulnerable pattern — can cause catastrophic backtracking (ReDoS). The match
+  runs synchronously inside SQLite and cannot be interrupted, freezing the
+  process (sync) or wedging the DB worker (async). It is opt-in — only a query
+  you author reaches it — so never point `REGEXP` at untrusted patterns or
+  unbounded attacker-controlled input. Safe matching of untrusted patterns needs
+  a linear-time engine (e.g. RE2) or an out-of-band timeout.
 
 ## Agent operations
 
