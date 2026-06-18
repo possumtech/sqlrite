@@ -9,6 +9,10 @@ import { DatabaseSync } from "node:sqlite";
  * @property {string|string[]} [dir] Directory or directories scanned for .sql files.
  * @property {string|string[]} [functions] Module path(s) for custom SQL functions.
  * @property {Record<string, string|number|boolean|null>} [params] $var substitutions for INIT blocks.
+ * @property {number} [timeout] busy_timeout in ms (default 5000); 0 restores immediate SQLITE_BUSY.
+ * @property {number} [cacheSize] cache_size: positive = pages, negative = KiB of memory.
+ * @property {number} [mmapSize] mmap_size: bytes of memory-mapped I/O; 0 disables. Inert on :memory:.
+ * @property {number} [maxPageCount] max_page_count: hard db-size ceiling in pages.
  */
 
 /**
@@ -41,31 +45,69 @@ export default class SqlRiteCore {
 		defensive: true, // block schema/page self-corruption (writable_schema, journal_mode=OFF, shadow tables)
 	});
 
+	// Curated, overridable tuning knobs → integer-validated PRAGMA. PRAGMA can't bind params, but
+	// each value is a validated safe integer, so interpolation is injection-free. Fail-hard on bad input.
+	static #TUNING = Object.freeze([
+		{
+			option: "cacheSize",
+			pragma: "cache_size",
+			ok: (v) => Number.isSafeInteger(v),
+			want: "a safe integer",
+		},
+		{
+			option: "mmapSize",
+			pragma: "mmap_size",
+			ok: (v) => Number.isSafeInteger(v) && v >= 0,
+			want: "a non-negative safe integer",
+		},
+		{
+			option: "maxPageCount",
+			pragma: "max_page_count",
+			ok: (v) => Number.isSafeInteger(v) && v > 0,
+			want: "a positive safe integer",
+		},
+	]);
+
 	/**
 	 * @param {SqlRiteOptions & { path: string }} options
 	 * @returns {DatabaseSync}
 	 */
 	static openDb(options) {
-		return new DatabaseSync(options.path, { ...SqlRiteCore.#HARDENED, ...options });
+		// timeout (busy_timeout, ms): non-zero default so concurrent writers wait instead of an
+		// immediate SQLITE_BUSY, completing the WAL posture. Native option; overridable by the user.
+		return new DatabaseSync(options.path, { timeout: 5000, ...SqlRiteCore.#HARDENED, ...options });
 	}
 
-	static initDb(db) {
+	/**
+	 * @param {DatabaseSync} db
+	 * @param {SqlRiteOptions} [options]
+	 */
+	static initDb(db, options = {}) {
 		db.exec("PRAGMA journal_mode = WAL;");
 		db.exec("PRAGMA synchronous = NORMAL;");
+
+		for (const { option, pragma, ok, want } of SqlRiteCore.#TUNING) {
+			const value = options[option];
+			if (value === undefined) continue;
+			if (!ok(value)) throw new Error(`SqlRite: ${option} must be ${want}`);
+			db.exec(`PRAGMA ${pragma} = ${value};`);
+		}
 
 		if (!SqlRiteCore.#hasFunction(db, "'x' REGEXP 'x'")) {
 			const regexCache = new Map();
 			db.function("regexp", { deterministic: true }, (pattern, string) => {
-				if (string === null) return 0;
-				let re = regexCache.get(pattern);
+				// SQL three-valued logic: a NULL pattern or subject yields NULL, never a match.
+				if (pattern === null || string === null) return null;
+				const key = String(pattern);
+				let re = regexCache.get(key);
 				if (!re) {
-					re = SqlRiteCore.#compileRegExp(pattern);
-					regexCache.set(pattern, re);
+					re = SqlRiteCore.#compileRegExp(key);
+					regexCache.set(key, re);
 				}
 				// REGEXP is boolean over a cached, reused RegExp, so neutralize the stateful
 				// flags each row: `g` becomes a no-op and `y` (sticky) anchors at the start.
 				re.lastIndex = 0;
-				return re.test(string) ? 1 : 0;
+				return re.test(String(string)) ? 1 : 0;
 			});
 		}
 

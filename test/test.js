@@ -188,6 +188,23 @@ test("REGEXP function", () => {
 	fs.rmSync("sql_regex", { recursive: true, force: true });
 });
 
+test("REGEXP yields NULL when either operand is NULL", () => {
+	if (!fs.existsSync("sql_regex_null")) fs.mkdirSync("sql_regex_null");
+	fs.writeFileSync(
+		"sql_regex_null/001.sql",
+		"-- PREP: match\nSELECT $subject REGEXP $pattern AS r;",
+	);
+
+	const sql = new SqlRiteSync({ dir: "sql_regex_null" });
+	// a NULL pattern must not compile to /null/ and match the literal text "null"
+	assert.strictEqual(sql.match.get({ subject: "null", pattern: null }).r, null);
+	assert.strictEqual(sql.match.get({ subject: null, pattern: "^a" }).r, null);
+	assert.strictEqual(sql.match.get({ subject: "abc", pattern: "^a" }).r, 1);
+
+	sql.close();
+	fs.rmSync("sql_regex_null", { recursive: true, force: true });
+});
+
 test("REGEXP inline flags", () => {
 	if (!fs.existsSync("sql_regex_flags")) fs.mkdirSync("sql_regex_flags");
 	fs.writeFileSync(

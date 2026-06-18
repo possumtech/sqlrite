@@ -16,7 +16,7 @@ export default class SqlRiteSync {
 	constructor(options = {}, db) {
 		const merged = { path: ":memory:", dir: "sql", ...options };
 		this.#db = db ?? SqlRiteCore.openDb(merged);
-		if (!db) SqlRiteCore.initDb(this.#db);
+		if (!db) SqlRiteCore.initDb(this.#db, merged);
 		this.#metaNum = SqlRiteCore.prepareMeta(this.#db, false);
 		this.#metaBig = SqlRiteCore.prepareMeta(this.#db, true);
 		this.#setupChunks(merged);
@@ -26,7 +26,7 @@ export default class SqlRiteSync {
 	static async open(options = {}) {
 		const merged = { path: ":memory:", dir: "sql", ...options };
 		const db = SqlRiteCore.openDb(merged);
-		SqlRiteCore.initDb(db);
+		SqlRiteCore.initDb(db, merged);
 		await SqlRiteCore.registerFunctions(db, merged.functions);
 		return new SqlRiteSync(merged, db);
 	}

@@ -6,7 +6,7 @@ const port = /** @type {import("node:worker_threads").MessagePort} */ (parentPor
 const { options } = workerData;
 const db = SqlRiteCore.openDb(options);
 
-SqlRiteCore.initDb(db);
+SqlRiteCore.initDb(db, options);
 await SqlRiteCore.registerFunctions(db, options.functions);
 
 const stmts = new Map();
