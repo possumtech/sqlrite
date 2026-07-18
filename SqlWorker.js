@@ -55,8 +55,7 @@ port.on("message", (msg) => {
 	try {
 		let result;
 		if (type === "EXEC") {
-			const sql = execs.get(name);
-			if (sql) db.exec(SqlRiteCore.template(sql, params));
+			db.exec(SqlRiteCore.template(execs.get(name), params));
 			result = SqlRiteCore.result(metas.get(name));
 		} else if (type === "TX") {
 			db.exec("BEGIN");

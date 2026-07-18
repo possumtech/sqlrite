@@ -60,7 +60,7 @@ export default class SqlRite {
 
 	/**
 	 * Opens a new SqlRite instance and waits for it to be fully initialized.
-	 * @param {Object} options
+	 * @param {import("./SqlRiteCore.js").SqlRiteOptions} [options]
 	 * @returns {Promise<SqlRite>}
 	 */
 	static async open(options) {
@@ -83,7 +83,7 @@ export default class SqlRite {
 	}
 
 	#rejectAll(err) {
-		for (const [, promise] of this.#promises) {
+		for (const promise of this.#promises.values()) {
 			promise.reject(err);
 		}
 		this.#promises.clear();

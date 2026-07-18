@@ -1,10 +1,10 @@
-import fs from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import SqlRiteCore from "../SqlRiteCore.js";
 
 function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
 	const dirs = Array.isArray(options.dir) ? options.dir : [options.dir];
-	const existingDirs = dirs.filter((d) => fs.existsSync(d));
+	const existingDirs = dirs.filter((d) => existsSync(d));
 
 	if (existingDirs.length === 0) {
 		console.warn(`No directories found to scan for SQL files. Expected: ${dirs.join(", ")}`);
@@ -99,10 +99,10 @@ function generateTypes(options = { dir: "sql", output: "SqlRite.d.ts" }) {
 
 	lines.push("}", "");
 
-	fs.writeFileSync(options.output, lines.join("\n"));
+	writeFileSync(options.output, lines.join("\n"));
 	console.log(`Generated ${options.output}`);
 }
 
 const { positionals } = parseArgs({ allowPositionals: true });
-const dir = positionals[0] || "sql";
+const dir = positionals[0] ?? "sql";
 generateTypes({ dir, output: "SqlRite.d.ts" });

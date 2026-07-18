@@ -1,6 +1,5 @@
-import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { basename, extname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 /**
@@ -121,13 +120,13 @@ export default class SqlRiteCore {
 		const paths = Array.isArray(functions) ? functions : [functions];
 
 		for (const funcPath of paths) {
-			const resolved = path.resolve(funcPath);
+			const resolved = resolve(funcPath);
 			const mod = await import(resolved);
 			const handler = mod.default;
 			if (typeof handler !== "function") {
 				throw new Error(`SqlRite: ${funcPath} must have a default export that is a function`);
 			}
-			const name = path.basename(resolved, path.extname(resolved));
+			const name = basename(resolved, extname(resolved));
 			const opts = {};
 			if (mod.deterministic) opts.deterministic = true;
 			db.function(name, opts, handler);
@@ -166,12 +165,11 @@ export default class SqlRiteCore {
 	}
 
 	static getFiles(dir) {
-		return fs
-			.readdirSync(dir, { withFileTypes: true, recursive: true })
+		return readdirSync(dir, { withFileTypes: true, recursive: true })
 			.filter((f) => f.isFile() && f.name.endsWith(".sql"))
-			.map((f) => path.join(f.parentPath, f.name))
+			.map((f) => join(f.parentPath, f.name))
 			.toSorted((a, b) =>
-				path.basename(a).localeCompare(path.basename(b), undefined, {
+				basename(a).localeCompare(basename(b), undefined, {
 					numeric: true,
 					sensitivity: "base",
 				}),
@@ -189,7 +187,7 @@ export default class SqlRiteCore {
 		const seen = new Map();
 
 		for (const file of files) {
-			const content = fs.readFileSync(file, "utf8");
+			const content = readFileSync(file, "utf8");
 			const matches = [...content.matchAll(SqlRiteCore.#CHUNK_REGEX)];
 
 			for (let i = 0; i < matches.length; i++) {
@@ -228,7 +226,7 @@ export default class SqlRiteCore {
 			if (value === null) return "NULL";
 			if (typeof value === "number") return String(value);
 			if (typeof value === "boolean") return value ? "1" : "0";
-			return `'${String(value).replace(/'/g, "''")}'`;
+			return `'${String(value).replaceAll("'", "''")}'`;
 		});
 	}
 
