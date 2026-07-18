@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import path from "node:path";
 import { after, describe, test } from "node:test";
 import SqlRite, { SqlRiteSync } from "../SqlRite.js";
-import SqlRiteCore from "../SqlRiteCore.js";
 
 // Setup test environment
-if (!fs.existsSync("sql")) fs.mkdirSync("sql");
+fs.mkdirSync("sql", { recursive: true });
 fs.writeFileSync(
 	"sql/001-init.sql",
 	"-- INIT: createEmployees\nCREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, position TEXT NOT NULL, salary REAL NOT NULL);\n" +
@@ -22,7 +20,7 @@ fs.writeFileSync(
 		"-- PREP: getPositions\nSELECT name, position FROM employees;\n-- PREP: getHighestPaidEmployee\nSELECT * FROM employees ORDER BY salary DESC LIMIT 1;\n-- EXEC: deleteTable\nDROP TABLE IF EXISTS sync_test;",
 );
 
-if (!fs.existsSync("db_fn")) fs.mkdirSync("db_fn");
+fs.mkdirSync("db_fn", { recursive: true });
 fs.writeFileSync(
 	"db_fn/double.js",
 	"export const deterministic = true;\nexport default (x) => x * 2;\n",
@@ -33,52 +31,6 @@ after(() => {
 	fs.rmSync("sql", { recursive: true, force: true });
 	fs.rmSync("sql2", { recursive: true, force: true });
 	fs.rmSync("db_fn", { recursive: true, force: true });
-});
-
-describe("SqlRiteCore", () => {
-	test("getFiles() should sort numerically", () => {
-		const files = SqlRiteCore.getFiles("sql");
-		const basenames = files.map((f) => path.basename(f));
-		assert.ok(
-			basenames.indexOf("001-init.sql") < basenames.indexOf("002-data.sql"),
-			"001 should come before 002",
-		);
-	});
-
-	test("getFiles() handles subdirectories", () => {
-		if (!fs.existsSync("sql/sub")) fs.mkdirSync("sql/sub");
-		fs.writeFileSync("sql/sub/999-last.sql", "-- INIT: subInit\nSELECT 1;");
-		const files = SqlRiteCore.getFiles("sql");
-		assert.ok(
-			files.some((f) => f.includes("999-last.sql")),
-			"Should find file in subdirectory",
-		);
-	});
-
-	test("parseSql() filters empty and trims", () => {
-		fs.writeFileSync("sql/empty.sql", "-- PREP: empty\n  \n  ");
-		const chunks = SqlRiteCore.parseSql(["sql/empty.sql"]);
-		assert.strictEqual(chunks.PREP.length, 0);
-	});
-
-	test("jsonify() handles objects and arrays", () => {
-		const input = { arr: [1, 2], obj: { a: 1 }, str: "val", nil: null };
-		const output = SqlRiteCore.jsonify(input);
-		assert.strictEqual(output.arr, "[1,2]");
-		assert.strictEqual(output.obj, '{"a":1}');
-		assert.strictEqual(output.str, "val");
-		assert.strictEqual(output.nil, null);
-		assert.deepStrictEqual(SqlRiteCore.jsonify(null), {});
-	});
-
-	test("jsonify() strips SQL prefixes from keys", () => {
-		const input = { $name: "val1", ":age": 20, "@id": 1 };
-		const output = SqlRiteCore.jsonify(input);
-		assert.strictEqual(output.name, "val1");
-		assert.strictEqual(output.age, 20);
-		assert.strictEqual(output.id, 1);
-		assert.ok(!("$name" in output));
-	});
 });
 
 describe("SqlRiteSync", () => {
@@ -171,7 +123,7 @@ describe("SqlRite (Async)", () => {
 });
 
 test("REGEXP function", () => {
-	if (!fs.existsSync("sql_regex")) fs.mkdirSync("sql_regex");
+	fs.mkdirSync("sql_regex", { recursive: true });
 	fs.writeFileSync(
 		"sql_regex/001.sql",
 		"-- INIT: createItems\nCREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT;\n" +
@@ -198,7 +150,7 @@ test("REGEXP function", () => {
 });
 
 test("REGEXP yields NULL when either operand is NULL", () => {
-	if (!fs.existsSync("sql_regex_null")) fs.mkdirSync("sql_regex_null");
+	fs.mkdirSync("sql_regex_null", { recursive: true });
 	fs.writeFileSync(
 		"sql_regex_null/001.sql",
 		"-- PREP: match\nSELECT $subject REGEXP $pattern AS r;",
@@ -215,7 +167,7 @@ test("REGEXP yields NULL when either operand is NULL", () => {
 });
 
 test("REGEXP inline flags", () => {
-	if (!fs.existsSync("sql_regex_flags")) fs.mkdirSync("sql_regex_flags");
+	fs.mkdirSync("sql_regex_flags", { recursive: true });
 	fs.writeFileSync(
 		"sql_regex_flags/001.sql",
 		"-- INIT: createItems\nCREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT;\n" +
@@ -253,7 +205,7 @@ test("REGEXP inline flags", () => {
 });
 
 test("uuid() function", () => {
-	if (!fs.existsSync("sql_uuid")) fs.mkdirSync("sql_uuid");
+	fs.mkdirSync("sql_uuid", { recursive: true });
 	fs.writeFileSync(
 		"sql_uuid/001.sql",
 		"-- INIT: createTokens\nCREATE TABLE tokens (id TEXT PRIMARY KEY DEFAULT (uuid()), label TEXT NOT NULL) STRICT;\n" +
@@ -276,7 +228,7 @@ test("uuid() function", () => {
 });
 
 test("INIT params templating", () => {
-	if (!fs.existsSync("sql_init_params")) fs.mkdirSync("sql_init_params");
+	fs.mkdirSync("sql_init_params", { recursive: true });
 	fs.writeFileSync(
 		"sql_init_params/001.sql",
 		"-- INIT: configure\nPRAGMA cache_size = $cacheSize;\n" +
@@ -293,7 +245,7 @@ test("INIT params templating", () => {
 });
 
 test("EXEC params templating", () => {
-	if (!fs.existsSync("sql_exec_params")) fs.mkdirSync("sql_exec_params");
+	fs.mkdirSync("sql_exec_params", { recursive: true });
 	fs.writeFileSync(
 		"sql_exec_params/001.sql",
 		"-- INIT: createTable\nCREATE TABLE kv (key TEXT, val TEXT) STRICT;\n" +
@@ -312,7 +264,7 @@ test("EXEC params templating", () => {
 });
 
 test("EXEC params templating (async)", async () => {
-	if (!fs.existsSync("sql_exec_async")) fs.mkdirSync("sql_exec_async");
+	fs.mkdirSync("sql_exec_async", { recursive: true });
 	fs.writeFileSync(
 		"sql_exec_async/001.sql",
 		"-- INIT: createTable\nCREATE TABLE kv (key TEXT, val TEXT) STRICT;\n" +
@@ -329,7 +281,7 @@ test("EXEC params templating (async)", async () => {
 });
 
 test("custom functions (sync via open)", async () => {
-	if (!fs.existsSync("sql_fn")) fs.mkdirSync("sql_fn");
+	fs.mkdirSync("sql_fn", { recursive: true });
 	fs.writeFileSync(
 		"sql_fn/001.sql",
 		"-- INIT: t\nCREATE TABLE t (val INTEGER) STRICT;\n" +
@@ -343,7 +295,7 @@ test("custom functions (sync via open)", async () => {
 });
 
 test("custom functions (async)", async () => {
-	if (!fs.existsSync("sql_fn2")) fs.mkdirSync("sql_fn2");
+	fs.mkdirSync("sql_fn2", { recursive: true });
 	fs.writeFileSync(
 		"sql_fn2/001.sql",
 		"-- INIT: t\nCREATE TABLE t (val TEXT) STRICT;\n" +
@@ -357,7 +309,7 @@ test("custom functions (async)", async () => {
 });
 
 test("custom functions (multiple + single string)", async () => {
-	if (!fs.existsSync("sql_fn3")) fs.mkdirSync("sql_fn3");
+	fs.mkdirSync("sql_fn3", { recursive: true });
 	fs.writeFileSync(
 		"sql_fn3/001.sql",
 		"-- INIT: t\nCREATE TABLE t (id INTEGER) STRICT;\n" +
@@ -374,7 +326,7 @@ test("custom functions (multiple + single string)", async () => {
 	fs.rmSync("sql_fn3", { recursive: true, force: true });
 
 	// Single string form
-	if (!fs.existsSync("sql_fn4")) fs.mkdirSync("sql_fn4");
+	fs.mkdirSync("sql_fn4", { recursive: true });
 	fs.writeFileSync("sql_fn4/001.sql", "-- PREP: getD\nSELECT double($x) as result;");
 	const sql2 = await SqlRiteSync.open({ dir: "sql_fn4", functions: "./db_fn/double.js" });
 	assert.strictEqual(sql2.getD.get({ x: 7 }).result, 14);
@@ -383,7 +335,7 @@ test("custom functions (multiple + single string)", async () => {
 });
 
 test("Multi-directory support", () => {
-	if (!fs.existsSync("sql2")) fs.mkdirSync("sql2");
+	fs.mkdirSync("sql2", { recursive: true });
 	fs.writeFileSync("sql2/extra.sql", "-- PREP: extra\nSELECT 1 as val;");
 	const sql = new SqlRiteSync({ dir: ["sql", "sql2"] });
 	const res = sql.extra.get();

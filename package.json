@@ -40,7 +40,7 @@
 	"scripts": {
 		"lint": "biome check --write .",
 		"lint:ci": "biome check .",
-		"test": "node --experimental-test-coverage --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 --test test/*.js",
+		"test": "node --experimental-test-coverage --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 --test",
 		"debug": "node --experimental-test-coverage --trace-warnings --inspect-brk --test",
 		"typecheck": "tsc",
 		"check": "npm run lint && npm run typecheck && npm test",

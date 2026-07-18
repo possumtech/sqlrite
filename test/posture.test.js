@@ -7,7 +7,7 @@ import SqlRiteCore from "../SqlRiteCore.js";
 const DIR = "sql_posture";
 
 before(() => {
-	if (!fs.existsSync(DIR)) fs.mkdirSync(DIR);
+	fs.mkdirSync(DIR, { recursive: true });
 	fs.writeFileSync(
 		`${DIR}/001.sql`,
 		"-- INIT: t\nCREATE TABLE t (name TEXT NOT NULL) STRICT;\n" +

@@ -6,7 +6,7 @@ import SqlRite, { SqlRiteSync } from "../SqlRite.js";
 const DIR = "sql_tx";
 
 before(() => {
-	if (!fs.existsSync(DIR)) fs.mkdirSync(DIR);
+	fs.mkdirSync(DIR, { recursive: true });
 	fs.writeFileSync(
 		`${DIR}/001.sql`,
 		"-- INIT: t\nCREATE TABLE acct (id INTEGER PRIMARY KEY, bal INTEGER NOT NULL CHECK (bal >= 0)) STRICT;\n" +

@@ -7,7 +7,7 @@ const DIR = "sql_bigint";
 const OVER_2_53 = 9007199254740993n; // 2^53 + 1
 
 before(() => {
-	if (!fs.existsSync(DIR)) fs.mkdirSync(DIR);
+	fs.mkdirSync(DIR, { recursive: true });
 	fs.writeFileSync(
 		`${DIR}/001.sql`,
 		"-- INIT: t\nCREATE TABLE ledger (amount INTEGER NOT NULL) STRICT;\n" +
