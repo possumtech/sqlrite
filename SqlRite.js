@@ -78,7 +78,7 @@ export default class SqlRite {
 		const promise = this.#promises.get(msg.id);
 		if (!promise) return;
 		this.#promises.delete(msg.id);
-		if (msg.error) promise.reject(new Error(msg.error));
+		if (msg.error !== undefined) promise.reject(msg.error);
 		else promise.resolve(msg.result);
 	}
 

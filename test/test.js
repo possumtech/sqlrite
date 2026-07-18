@@ -131,6 +131,15 @@ describe("SqlRite (Async)", () => {
 		await sql.close();
 	});
 
+	test("errors cross the worker boundary as real Errors", async () => {
+		const sql = await SqlRite.open({ dir: "sql" });
+		const err = await sql.addEquipment.run({ employee_id: 999, name: "X" }).catch((e) => e);
+		assert.ok(err instanceof Error, "rejection must be an Error instance");
+		assert.match(err.message, /FOREIGN KEY constraint failed/);
+		assert.match(err.stack, /SqlWorker\.js/, "worker stack must survive the clone");
+		await sql.close();
+	});
+
 	test("READY signal and methods setup (via open)", async () => {
 		const sql = await SqlRite.open({ dir: "sql" });
 		assert.strictEqual(typeof sql.addEmployee.run, "function");

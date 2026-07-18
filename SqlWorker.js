@@ -82,6 +82,8 @@ port.on("message", (msg) => {
 
 		port.postMessage({ id, result });
 	} catch (error) {
-		port.postMessage({ id, error: error instanceof Error ? error.message : String(error) });
+		// postMessage structured-clones Errors: class, message, stack, and cause
+		// survive the boundary; non-standard own props (e.g. errcode) do not.
+		port.postMessage({ id, error });
 	}
 });
