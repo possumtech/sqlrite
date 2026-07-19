@@ -1,6 +1,6 @@
 {
 	"name": "@possumtech/sqlrite",
-	"version": "6.0.0",
+	"version": "6.1.0",
 	"description": "SQL Done Right — SQL-first, zero-dependency persistence over the built-in node:sqlite",
 	"keywords": [
 		"node",
