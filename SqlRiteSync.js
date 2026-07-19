@@ -34,6 +34,8 @@ export default class SqlRiteSync {
 	#setupChunks(merged) {
 		const chunks = SqlRiteCore.loadChunks(merged);
 
+		SqlRiteCore.applyMigrations(this.#db, chunks.MIGRATE);
+
 		for (const init of chunks.INIT) {
 			this.#db.exec(SqlRiteCore.template(init.sql, merged.params));
 		}

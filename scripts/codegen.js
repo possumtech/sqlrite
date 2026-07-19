@@ -26,11 +26,13 @@ export interface Chunks {
 	EXEC: Chunk[];
 	TX: Chunk[];
 	PREP: Chunk[];
+	MIGRATE: Array<Chunk & { version: number }>;
 }
 
 export default class SqlRiteCore {
 	static openDb(options: SqlRiteOptions & { path: string }): DatabaseSync;
 	static initDb(db: DatabaseSync, options?: SqlRiteOptions): void;
+	static applyMigrations(db: DatabaseSync, migrations: Array<Chunk & { version: number }>): void;
 	static registerFunctions(db: DatabaseSync, functions?: string | string[]): Promise<void>;
 	static loadChunks(options: SqlRiteOptions): Chunks;
 	static getFiles(dir: string): string[];
@@ -52,6 +54,7 @@ function generateTypes({ dir = "sql", output = "SqlRite.d.ts", base = false }) {
 		EXEC: [],
 		TX: [],
 		PREP: [],
+		MIGRATE: [],
 	});
 	if (!base) {
 		const dirs = Array.isArray(dir) ? dir : [dir];

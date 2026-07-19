@@ -46,6 +46,47 @@ describe("SqlRiteCore.parseSql", () => {
 		}
 	});
 
+	test("parses MIGRATE versions from the tag with a cosmetic label", () => {
+		const file = `${DIR}/migrate.sql`;
+		fs.writeFileSync(
+			file,
+			"-- MIGRATE: 2 addEmail\nALTER TABLE users ADD COLUMN email TEXT;\n" +
+				"-- MIGRATE: 007 padded\nSELECT 7;",
+		);
+		try {
+			const { MIGRATE } = SqlRiteCore.parseSql([file]);
+			assert.deepStrictEqual(
+				MIGRATE.map((m) => m.version),
+				[2, 7],
+			);
+		} finally {
+			fs.rmSync(file, { force: true });
+		}
+	});
+
+	test("throws on duplicate MIGRATE versions, including padded collisions", () => {
+		const file = `${DIR}/migrate_dup.sql`;
+		fs.writeFileSync(file, "-- MIGRATE: 7\nSELECT 1;\n-- MIGRATE: 007\nSELECT 2;");
+		try {
+			assert.throws(() => SqlRiteCore.parseSql([file]), /duplicate MIGRATE version 7/);
+		} finally {
+			fs.rmSync(file, { force: true });
+		}
+	});
+
+	test("throws on a non-positive MIGRATE version", () => {
+		const file = `${DIR}/migrate_zero.sql`;
+		fs.writeFileSync(file, "-- MIGRATE: 0\nSELECT 1;");
+		try {
+			assert.throws(
+				() => SqlRiteCore.parseSql([file]),
+				/MIGRATE version must be a positive integer, got "0"/,
+			);
+		} finally {
+			fs.rmSync(file, { force: true });
+		}
+	});
+
 	test("warns on duplicate names and lets the later chunk override", () => {
 		const file = `${DIR}/dup.sql`;
 		fs.writeFileSync(file, "-- PREP: dup\nSELECT 1;\n-- PREP: dup\nSELECT 2;");

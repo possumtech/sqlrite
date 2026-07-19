@@ -18,6 +18,8 @@ const metaBig = SqlRiteCore.prepareMeta(db, true);
 
 const chunks = SqlRiteCore.loadChunks(options);
 
+SqlRiteCore.applyMigrations(db, chunks.MIGRATE);
+
 for (const init of chunks.INIT) {
 	db.exec(SqlRiteCore.template(init.sql, options.params));
 }

@@ -16,19 +16,23 @@ import { DatabaseSync } from "node:sqlite";
 
 /**
  * @typedef {object} Chunk
- * @property {string} type INIT, EXEC, TX, or PREP.
+ * @property {string} type INIT, EXEC, TX, PREP, or MIGRATE.
  * @property {string} name Tag name.
  * @property {string} sql Block body.
  * @property {boolean} [bigint] PREP only: read integer columns as BigInt.
+ * @property {number} [version] MIGRATE only: schema version recorded in user_version.
  */
 
-/** @typedef {{ INIT: Chunk[], EXEC: Chunk[], TX: Chunk[], PREP: Chunk[] }} Chunks */
+/** @typedef {Chunk & { version: number }} Migration */
+
+/** @typedef {{ INIT: Chunk[], EXEC: Chunk[], TX: Chunk[], PREP: Chunk[], MIGRATE: Migration[] }} Chunks */
 
 /** @typedef {{ changes: number|bigint, lastInsertRowid: number|bigint }} SqlRiteResult */
 
 export default class SqlRiteCore {
-	// Captures: 1=type, 2=name, 3=trailing flags (rest of the tag line, e.g. "bigint").
-	static #CHUNK_REGEX = /^--\s*(INIT|EXEC|TX|PREP):\s*(\w+)(.*)$/gim;
+	// Captures: 1=type, 2=name, 3=trailing flags (rest of the tag line, e.g. "bigint";
+	// for MIGRATE a cosmetic label). MIGRATE names are versions: digits only.
+	static #CHUNK_REGEX = /^--\s*(INIT|EXEC|TX|PREP|MIGRATE):\s*(\w+)(.*)$/gim;
 
 	// Connection-scoped write metadata. Read via setReadBigInts so a rowid past 2^53 is lossless.
 	static #META_SQL = "SELECT last_insert_rowid() AS lastInsertRowid, changes() AS changes";
@@ -191,9 +195,11 @@ export default class SqlRiteCore {
 	 */
 	static parseSql(files) {
 		/** @type {Chunks} */
-		const chunks = { INIT: [], EXEC: [], TX: [], PREP: [] };
+		const chunks = { INIT: [], EXEC: [], TX: [], PREP: [], MIGRATE: [] };
 		/** @type {Map<string, { type: string, file: string }>} */
 		const seen = new Map();
+		/** @type {Map<number, string>} */
+		const versions = new Map();
 
 		for (const file of files) {
 			const content = readFileSync(file, "utf8");
@@ -210,6 +216,24 @@ export default class SqlRiteCore {
 				const sql = content.slice(start, end).trim();
 				if (!sql) continue;
 
+				if (type === "MIGRATE") {
+					if (!/^\d+$/.test(name) || Number(name) < 1) {
+						throw new Error(
+							`SqlRite: MIGRATE version must be a positive integer, got "${name}" (${file})`,
+						);
+					}
+					const version = Number(name);
+					const prevFile = versions.get(version);
+					if (prevFile) {
+						throw new Error(
+							`SqlRite: duplicate MIGRATE version ${version} (${file}, already in ${prevFile})`,
+						);
+					}
+					versions.set(version, file);
+					chunks.MIGRATE.push({ type, name, sql, version });
+					continue;
+				}
+
 				const prev = type !== "INIT" ? seen.get(name) : undefined;
 				if (prev) {
 					console.warn(
@@ -225,6 +249,41 @@ export default class SqlRiteCore {
 		}
 
 		return chunks;
+	}
+
+	/**
+	 * Apply pending -- MIGRATE chunks: every version above the database's
+	 * PRAGMA user_version, ascending, each atomically with its version bump.
+	 * Zero writes when the database is current, so readOnly connections open.
+	 * @param {DatabaseSync} db
+	 * @param {Migration[]} migrations
+	 */
+	static applyMigrations(db, migrations) {
+		if (migrations.length === 0) return;
+		const read = db.prepare("PRAGMA user_version");
+		const current = /** @type {any} */ (read.get()).user_version;
+		const pending = migrations
+			.filter((m) => m.version > current)
+			.toSorted((a, b) => a.version - b.version);
+
+		for (const m of pending) {
+			db.exec("BEGIN IMMEDIATE");
+			try {
+				// Re-check under the write lock: a concurrent opener may have won the race.
+				if (/** @type {any} */ (read.get()).user_version >= m.version) {
+					db.exec("COMMIT");
+					continue;
+				}
+				db.exec(m.sql);
+				// user_version lives in the header page: the bump commits or rolls back
+				// with the body. The version is a validated integer — injection-free.
+				db.exec(`PRAGMA user_version = ${m.version}`);
+				db.exec("COMMIT");
+			} catch (error) {
+				db.exec("ROLLBACK");
+				throw error;
+			}
+		}
 	}
 
 	static template(sql, params) {
