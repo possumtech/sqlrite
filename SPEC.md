@@ -222,12 +222,26 @@ them — use `await SqlRiteSync.open()` (or the async facade) when passing
 
 ## Type generation
 
+The package ships `SqlRite.d.ts` covering the static surface — typed options,
+results, and facade lifecycles — plus a permissive `[method: string]` index
+signature so your dynamic methods type as `any` out of the box. Sharpen to
+exact per-method types by generating from your `.sql` files:
+
 ```bash
-node scripts/codegen.js [dir]   # writes SqlRite.d.ts (default dir "sql")
+node node_modules/@possumtech/sqlrite/scripts/codegen.js [dir]   # default dir "sql"
 ```
 
-Generates TypeScript declarations for the dynamically generated methods from the
-`.sql` files in `dir`.
+This writes `SqlRite.d.ts` into your project; point TypeScript at it with a
+`paths` override, which takes precedence over the shipped types:
+
+```json
+{ "compilerOptions": { "paths": { "@possumtech/sqlrite": ["./SqlRite.d.ts"] } } }
+```
+
+The generated file drops the index signature, so a typo'd method name is a
+type error. Re-run after adding or renaming tags. (`--base` regenerates the
+static-only surface; the library's `prepack` uses it to build the shipped
+types.)
 
 ## Limits & security
 

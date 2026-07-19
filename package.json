@@ -20,18 +20,31 @@
 	"license": "MIT",
 	"author": "@wikitopian",
 	"type": "module",
+	"types": "./SqlRite.d.ts",
 	"files": [
 		"SqlRite.js",
 		"SqlRiteSync.js",
 		"SqlRiteCore.js",
 		"SqlWorker.js",
+		"SqlRite.d.ts",
+		"SqlRiteSync.d.ts",
+		"SqlRiteCore.d.ts",
 		"scripts/codegen.js",
 		"SPEC.md"
 	],
 	"exports": {
-		".": "./SqlRite.js",
-		"./sync": "./SqlRiteSync.js",
-		"./core": "./SqlRiteCore.js"
+		".": {
+			"types": "./SqlRite.d.ts",
+			"default": "./SqlRite.js"
+		},
+		"./sync": {
+			"types": "./SqlRiteSync.d.ts",
+			"default": "./SqlRiteSync.js"
+		},
+		"./core": {
+			"types": "./SqlRiteCore.d.ts",
+			"default": "./SqlRiteCore.js"
+		}
 	},
 	"engines": {
 		"node": ">=26.0.0",
@@ -44,7 +57,9 @@
 		"debug": "node --experimental-test-coverage --trace-warnings --inspect-brk --test",
 		"typecheck": "tsc",
 		"check": "npm run lint && npm run typecheck && npm test",
-		"build:types": "node scripts/codegen.js"
+		"build:types": "node scripts/codegen.js",
+		"prepack": "node scripts/codegen.js --base",
+		"postpack": "node -e \"for (const f of ['SqlRite.d.ts', 'SqlRiteSync.d.ts', 'SqlRiteCore.d.ts']) require('node:fs').rmSync(f, { force: true });\""
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.4",
