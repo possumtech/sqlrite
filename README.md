@@ -2,7 +2,7 @@
 
 [![check](https://github.com/possumtech/sqlrite/actions/workflows/check.yml/badge.svg)](https://github.com/possumtech/sqlrite/actions/workflows/check.yml)
 [![npm](https://img.shields.io/npm/v/%40possumtech%2Fsqlrite)](https://www.npmjs.com/package/@possumtech/sqlrite)
-[![node](https://img.shields.io/badge/node-%3E%3D26-5fa04e)](https://nodejs.org)
+[![node](https://img.shields.io/badge/node-26%2B-5fa04e)](https://nodejs.org)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 SQL-first persistence for Node.js — a zero-dependency wrapper over the built-in
