@@ -247,6 +247,11 @@ Generates TypeScript declarations for the dynamically generated methods from the
   read committed results with a separate `-- PREP`.
 - **Async serialization.** The async facade processes one Worker message at a
   time; calls are serialized, not concurrent.
+- **Idle instances don't hold the process.** The async facade unrefs its Worker
+  whenever no call is in flight and refs it for each round-trip, so an unclosed
+  instance can't pin the process while pending work is never dropped. Exiting
+  without `close()` is WAL-crash-safe (the next open recovers), but `close()` /
+  `await using` remains the clean shutdown.
 - **Async errors are structured-cloned.** A rejected call carries the worker's
   original error — class, message, stack, and `cause` survive the boundary;
   non-standard own properties (e.g. an `errcode`) do not.

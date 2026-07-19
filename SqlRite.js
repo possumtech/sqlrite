@@ -40,6 +40,9 @@ export default class SqlRite {
 				if (msg.type === "READY") {
 					this.#setupMethods(msg.names);
 					this.#worker.on("message", (msg) => this.#handleMessage(msg));
+					// An idle instance must not hold the process open (#8): unref while
+					// no call is in flight; #send refs for each round-trip's duration.
+					this.#worker.unref();
 					resolve(this);
 				}
 			});
@@ -78,6 +81,7 @@ export default class SqlRite {
 		const promise = this.#promises.get(msg.id);
 		if (!promise) return;
 		this.#promises.delete(msg.id);
+		if (this.#promises.size === 0) this.#worker.unref();
 		if (msg.error !== undefined) promise.reject(msg.error);
 		else promise.resolve(msg.result);
 	}
@@ -109,25 +113,26 @@ export default class SqlRite {
 		}
 	}
 
-	async #callWorker(type, name, params) {
-		if (this.#closed) throw new Error("SqlRite instance is closed");
-		await this.#readyPromise;
+	#send(type, name, params) {
 		const { promise, resolve, reject } = Promise.withResolvers();
 		const id = this.#id++;
+		if (this.#promises.size === 0) this.#worker.ref();
 		this.#promises.set(id, { resolve, reject });
 		this.#worker.postMessage({ id, type, name, params });
 		return promise;
+	}
+
+	async #callWorker(type, name, params) {
+		if (this.#closed) throw new Error("SqlRite instance is closed");
+		await this.#readyPromise;
+		return this.#send(type, name, params);
 	}
 
 	async close() {
 		if (this.#closed) return;
 		this.#closed = true;
 		await this.#readyPromise.catch(() => {});
-		const { promise, resolve, reject } = Promise.withResolvers();
-		const id = this.#id++;
-		this.#promises.set(id, { resolve, reject });
-		this.#worker.postMessage({ id, type: "CLOSE" });
-		return promise;
+		return this.#send("CLOSE");
 	}
 
 	async [Symbol.asyncDispose]() {

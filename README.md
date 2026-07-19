@@ -49,7 +49,8 @@ const user = await sql.getUserByName.get({ name: "Alice" });
 ```
 
 Construct only via `open()` — the constructor throws otherwise. Methods return
-Promises.
+Promises. An idle instance does not hold the process open; `close()` (or
+`await using`) is still the clean shutdown.
 
 ### Sync
 
