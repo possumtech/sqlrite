@@ -22,6 +22,10 @@ contract — read it before writing code against or inside this library.
 - Transactions are declarative: one `-- TX` block, `BEGIN`/`COMMIT`/auto-
   `ROLLBACK`. There is no JS transaction API by design.
 - Integers past 2^53 throw unless the tag carries the `bigint` flag.
+- JS `number` params bind as SQLite `REAL` (storage into `INTEGER` columns
+  converts losslessly; SQL arithmetic on the bound value is float). Pass
+  `BigInt` for integer-exact binding. Booleans bind as `1`/`0`; `Date` and
+  other class instances throw — convert explicitly.
 - Async facade rejects with the worker's real Error (class, stack, cause).
 
 ## Working on this repository

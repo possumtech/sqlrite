@@ -93,6 +93,8 @@ A `-- PREP` method exposes three modes:
 - Integers read as `number`; a value past `2^53 − 1` throws rather than silently
   rounding. Opt a statement into `BigInt` with a `bigint` flag on its tag — see
   [SPEC.md](SPEC.md#bigint-flag).
+- JS numbers bind as `REAL` (storage into `INTEGER` columns converts
+  losslessly); pass `BigInt` params for integer-exact SQL arithmetic.
 
 ```sql
 -- PREP: addUser

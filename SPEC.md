@@ -40,8 +40,10 @@ them is a paradigm break, not a refactor.
 A block runs from its tag line to the next tag (or end of file). Empty blocks are
 skipped. `-- INIT` names are not deduplicated; duplicate `EXEC`/`PREP`/`TX` names
 emit a warning and the last definition wins; duplicate `MIGRATE` versions throw.
-Within a directory set, files are scanned recursively and ordered by basename
-numerically (`001-*.sql` before `002-*.sql`) into one execution plan.
+The names `constructor`, `open`, `close`, and `ready` are reserved — an
+`EXEC`/`TX`/`PREP` tag using one throws at load (it could never become a
+method). Within a directory set, files are scanned recursively and ordered by
+basename numerically (`001-*.sql` before `002-*.sql`) into one execution plan.
 
 ### -- INIT (schema & pragmas)
 
@@ -71,8 +73,17 @@ three modes:
 - Bind with named parameters (`$name`, `:name`, `@name`). The JS interface takes
   an object; a leading `$`/`:`/`@` on keys is stripped, so `{ name }` binds
   `$name`.
-- Object and array parameter values are `JSON.stringify`-ed on input. Output is
-  **not** parsed — call `JSON.parse()` yourself.
+- Plain-object and array parameter values are `JSON.stringify`-ed on input.
+  Output is **not** parsed — call `JSON.parse()` yourself.
+- Booleans bind as `1`/`0`. `TypedArray`s pass through and bind as `BLOB`.
+  Anything else non-primitive — `Date`, `Map`, class instances, `undefined` —
+  throws a named `unsupported parameter type` error at the boundary instead of
+  dying in `node:sqlite`'s generic bind failure. Pass `date.toISOString()` (or
+  epoch ms) explicitly.
+- JS `number` values bind as `REAL`: storage into `INTEGER` columns converts
+  losslessly (STRICT included), but SQL arithmetic on the bound value follows
+  `REAL` semantics — `$v / 3` divides as floats. Pass a `BigInt` for
+  integer-exact binding; it binds as `INTEGER` without any flag.
 - `.run()` returns `{ changes, lastInsertRowid }`, as do `-- EXEC` and `-- TX`.
   Both fields are `number` by default, `BigInt` with the [`bigint`](#bigint-flag)
   flag; without it, a `lastInsertRowid` past `2^53` throws rather than rounding.
@@ -85,6 +96,12 @@ developer-authored SQL with constant or developer-supplied inputs — DDL,
 single-quote escaped, numbers/booleans/`null` are inlined, and identifiers are
 not handled. Never pass untrusted input through `-- EXEC`; use `-- PREP` for
 runtime values.
+
+After templating, any parameter-shaped token (`$x`, `:x`, `@x`) left outside
+string literals, quoted identifiers, and comments throws
+`unbound parameter … in EXEC <name>` — under `db.exec` it would otherwise
+silently bind `NULL`. Dollar text inside quotes (`'cost: $5'`) and identifiers
+containing `$` stay legal. The same check guards `-- TX` and `-- INIT`.
 
 ```sql
 -- EXEC: insertKv
@@ -147,7 +164,8 @@ Rules, all fail-hard:
 - Versions are positive integers, unique across the directory set. A duplicate
   (e.g. a branch merge where both sides claim `7`) throws at load.
 - No `$var` templating — migrations are deterministic text, or they are not a
-  history.
+  history. A parameter-shaped token in a pending migration throws at apply
+  (under `db.exec` it would silently bind `NULL`).
 - Never edit an applied migration. The repo's git history is the audit trail;
   the database records only how far it has advanced.
 - A current database takes zero writes, so `readOnly` connections keep opening.
