@@ -30,7 +30,8 @@
 		"SqlRiteSync.d.ts",
 		"SqlRiteCore.d.ts",
 		"scripts/codegen.js",
-		"SPEC.md"
+		"SPEC.md",
+		"AGENTS.md"
 	],
 	"exports": {
 		".": {

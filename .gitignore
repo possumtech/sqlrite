@@ -3,4 +3,4 @@ node_modules/
 *.tgz
 *.d.ts
 .env
-AGENTS.md
+NOTES.md
