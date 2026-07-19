@@ -31,7 +31,8 @@ becomes a method on the returned object.
 
 | Tag | Becomes | What it does |
 | :-- | :-- | :-- |
-| `-- INIT: <name>` | runs at open | DDL / `PRAGMA` executed once when the DB opens. Use idempotent DDL. |
+| `-- INIT: <name>` | runs at open | DDL / `PRAGMA` executed every open. Use idempotent DDL. |
+| `-- MIGRATE: <n>` | runs once per database | Versioned schema evolution recorded in `PRAGMA user_version` — atomic, exactly-once, no ledger table. `ALTER TABLE` belongs here. |
 | `-- PREP: <name>` | `db.<name>.{all,get,run}(params)` | Prepared statement — the **only** path for runtime or untrusted values. |
 | `-- EXEC: <name>` | `db.<name>(params)` | `db.exec()` of the block. **Trusted SQL only** — values are string-interpolated, not bound. |
 | `-- TX: <name>` | `db.<name>(params)` | `-- EXEC` wrapped in `BEGIN`/`COMMIT` (auto-`ROLLBACK` on error). Trusted SQL only. |

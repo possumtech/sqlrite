@@ -12,6 +12,10 @@ contract — read it before writing code against or inside this library.
   JS. Regenerate exact method types afterward:
   `node node_modules/@possumtech/sqlrite/scripts/codegen.js` (wire the output
   via a tsconfig `paths` override — see SPEC.md#type-generation).
+- Evolve schema by appending a `-- MIGRATE: <n>` block with the next integer
+  version (grep `-- MIGRATE:` for the current max). Applied once per database,
+  atomically, before `-- INIT`. Never edit an applied migration; put
+  non-idempotent DDL (`ALTER TABLE`) here, never in `-- INIT`.
 - Trust boundary: `-- PREP` binds parameters and is the only path for runtime
   or untrusted values. `-- EXEC` / `-- TX` string-interpolate — developer-
   authored SQL only. Routing user input through them is SQL injection.

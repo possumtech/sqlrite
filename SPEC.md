@@ -39,9 +39,9 @@ them is a paradigm break, not a refactor.
 
 A block runs from its tag line to the next tag (or end of file). Empty blocks are
 skipped. `-- INIT` names are not deduplicated; duplicate `EXEC`/`PREP`/`TX` names
-emit a warning and the last definition wins. Within a directory set, files are
-scanned recursively and ordered by basename numerically (`001-*.sql` before
-`002-*.sql`) into one execution plan.
+emit a warning and the last definition wins; duplicate `MIGRATE` versions throw.
+Within a directory set, files are scanned recursively and ordered by basename
+numerically (`001-*.sql` before `002-*.sql`) into one execution plan.
 
 ### -- INIT (schema & pragmas)
 
@@ -118,6 +118,44 @@ write metadata `{ changes, lastInsertRowid }` (`number`, or `BigInt` with the
 return result rows: keep intra-transaction data flow in SQL
 (`last_insert_rowid()`, subqueries) and read committed results with a separate
 `-- PREP` afterward.
+
+### -- MIGRATE (versioned schema evolution)
+
+Once-per-database migrations recorded in the database file's own header via
+`PRAGMA user_version` — no ledger table. The version is the explicit integer in
+the tag (a trailing label is cosmetic); file names and ordering don't affect
+it, so files can be reorganized freely without rewriting history.
+
+```sql
+-- MIGRATE: 1 baseline
+CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT;
+
+-- MIGRATE: 2 addEmail
+ALTER TABLE users ADD COLUMN email TEXT;
+```
+
+At open, before any `-- INIT`, every block with a version above the database's
+`user_version` runs in ascending order. Each migration executes inside
+`BEGIN IMMEDIATE` together with its `user_version` bump: SQLite DDL is
+transactional, so a failed migration rolls back body and bump together and
+fails `open()` with the migration's error — no partial states. Concurrent
+openers serialize on the write lock (the `busy_timeout` default) and re-check
+the version inside it, so a lost race is a no-op, never a double-run.
+
+Rules, all fail-hard:
+
+- Versions are positive integers, unique across the directory set. A duplicate
+  (e.g. a branch merge where both sides claim `7`) throws at load.
+- No `$var` templating — migrations are deterministic text, or they are not a
+  history.
+- Never edit an applied migration. The repo's git history is the audit trail;
+  the database records only how far it has advanced.
+- A current database takes zero writes, so `readOnly` connections keep opening.
+
+Division of labor: `-- INIT` runs every open (posture, idempotent seeds);
+`-- MIGRATE` runs once per database, forever. Non-idempotent DDL
+(`ALTER TABLE …`) belongs in `-- MIGRATE`, never `-- INIT`. Read the current
+version with a `-- PREP` on `PRAGMA user_version` if you need it.
 
 ### bigint flag
 
@@ -293,6 +331,10 @@ does not do.
   not a post-hoc `PRAGMA foreign_keys = ON`.
 - **No `.ts` source.** A published library cannot ship type-stripped files under
   `node_modules`, so types stay in JSDoc and `SqlRite.d.ts` is generated.
+- **No down migrations, ledger table, or migration checksums.** Rolling back is
+  restoring a backup — SQLite databases are files. `PRAGMA user_version` plus
+  git history replaces the ledger; timestamp/UUID migration naming is rejected
+  so version collisions surface at load instead of silently interleaving.
 - **No environment configuration.** Tuning flows through exactly two channels:
   the options object (typed, per-instance, fail-hard) and `-- INIT` `$var`
   params (SQL-first). A library reading `SQLRITE_*` env vars would be a third,
@@ -305,6 +347,8 @@ does not do.
   grep `-- INIT:`.
 - Add an operation: add a tagged block to a `.sql` file, then call `db.<name>`
   (re-run `codegen.js` to refresh types).
+- Evolve schema: append a `-- MIGRATE: <n>` block with the next version (grep
+  `-- MIGRATE:` for the current max). Never edit an applied migration.
 - Bind runtime values with `-- PREP` + a named-parameter object; never
   interpolate untrusted input through `-- EXEC` or `-- TX`.
 - Group dependent writes in a single `-- TX` block for atomicity.
