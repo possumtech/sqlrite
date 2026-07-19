@@ -279,6 +279,11 @@ does not do.
   not a post-hoc `PRAGMA foreign_keys = ON`.
 - **No `.ts` source.** A published library cannot ship type-stripped files under
   `node_modules`, so types stay in JSDoc and `SqlRite.d.ts` is generated.
+- **No environment configuration.** Tuning flows through exactly two channels:
+  the options object (typed, per-instance, fail-hard) and `-- INIT` `$var`
+  params (SQL-first). A library reading `SQLRITE_*` env vars would be a third,
+  process-global, stringly-typed channel; env-driven config belongs to the host
+  app (`--env-file` + `process.env` at the call site).
 
 ## Working with the source
 
