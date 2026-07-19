@@ -34,7 +34,7 @@
 		"./core": "./SqlRiteCore.js"
 	},
 	"engines": {
-		"node": ">=25.0.0",
+		"node": ">=26.0.0",
 		"npm": ">=11.1.0"
 	},
 	"scripts": {
@@ -47,8 +47,8 @@
 		"build:types": "node scripts/codegen.js"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.4.6",
-		"@types/node": "^25.9.1",
+		"@biomejs/biome": "2.5.4",
+		"@types/node": "^26.1.1",
 		"typescript": "^6.0.3"
 	}
 }
