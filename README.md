@@ -6,7 +6,7 @@ SqlRite turns each tagged block into a JavaScript method. No models, no query
 builder, no implicit `find`/`save` — every operation is an explicit SQL block you
 can read.
 
-- Requires Node `>=25.0.0`, npm `>=11.1.0`. Zero runtime dependencies.
+- Requires Node `>=26.0.0`, npm `>=11.1.0`. Zero runtime dependencies.
 - Two facades over one core: **async** (DB in a Worker thread) and **sync**.
 
 > Full reference — exhaustive tag/option semantics, the design contract, security

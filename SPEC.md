@@ -7,7 +7,7 @@ detail.
 
 ## Architecture
 
-Zero-dependency, SQL-first wrapper over `node:sqlite` (Node `>=25`). Three facades
+Zero-dependency, SQL-first wrapper over `node:sqlite` (Node `>=26`). Three facades
 share one core:
 
 - `SqlRiteCore.js` — static utilities: file scan, tag parse, templating,
@@ -247,6 +247,9 @@ Generates TypeScript declarations for the dynamically generated methods from the
   read committed results with a separate `-- PREP`.
 - **Async serialization.** The async facade processes one Worker message at a
   time; calls are serialized, not concurrent.
+- **Async errors are structured-cloned.** A rejected call carries the worker's
+  original error — class, message, stack, and `cause` survive the boundary;
+  non-standard own properties (e.g. an `errcode`) do not.
 
 ## Design decisions & non-goals
 
@@ -264,7 +267,7 @@ does not do.
   with integer validation — SqlRite is not a generic PRAGMA passthrough.
 - **`PRAGMA dml_strict` is fiction.** Not a real pragma (it reads back
   `undefined`). The DQS-rejection it claimed is already the `node:sqlite` default
-  via `enableDoubleQuotedStringLiterals: false`. Verified on Node 25.8.1.
+  via `enableDoubleQuotedStringLiterals: false`. Verified on Node 26.3.1.
 - **Foreign keys via constructor option.** `enableForeignKeyConstraints: true`,
   not a post-hoc `PRAGMA foreign_keys = ON`.
 - **No `.ts` source.** A published library cannot ship type-stripped files under
