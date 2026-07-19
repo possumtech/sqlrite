@@ -14,7 +14,6 @@ export default class SqlRite {
 	/** @type {Promise<SqlRite>} */
 	#readyPromise;
 	#closed = false;
-	#protected = new Set(["close", "constructor", "ready"]);
 
 	/**
 	 * @param {import("./SqlRiteCore.js").SqlRiteOptions} [options]
@@ -96,15 +95,12 @@ export default class SqlRite {
 
 	#setupMethods(names) {
 		for (const name of names.EXEC) {
-			if (this.#protected.has(name)) continue;
 			this[name] = (params) => this.#callWorker("EXEC", name, params);
 		}
 		for (const name of names.TX) {
-			if (this.#protected.has(name)) continue;
 			this[name] = (params) => this.#callWorker("TX", name, params);
 		}
 		for (const name of names.PREP) {
-			if (this.#protected.has(name)) continue;
 			this[name] = {
 				all: (params) => this.#callWorker("PREP_ALL", name, params),
 				get: (params) => this.#callWorker("PREP_GET", name, params),

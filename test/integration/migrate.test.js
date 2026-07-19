@@ -106,6 +106,16 @@ describe("-- MIGRATE (#12)", () => {
 		assert.strictEqual(sql.mode.get().v, "on", "INIT must see the migrated table");
 	});
 
+	test("a parameter-shaped token in a pending migration fails at apply", () => {
+		const tokened = `${DIR}/tokened`;
+		fs.mkdirSync(tokened, { recursive: true });
+		fs.writeFileSync(`${tokened}/001.sql`, "-- MIGRATE: 1 oops\nSELECT $oops;");
+		assert.throws(
+			() => new SqlRiteSync({ path: `${DIR}/tokened.db`, dir: tokened }),
+			/unbound parameter \$oops in MIGRATE 1/,
+		);
+	});
+
 	test("a current database needs zero writes: readOnly connections open", () => {
 		// applyMigrations directly, isolating the zero-writes claim from initDb.
 		const db = SqlRiteCore.openDb({ path: DB, readOnly: true });

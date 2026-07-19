@@ -118,8 +118,26 @@ describe("SqlRiteCore.template", () => {
 		);
 	});
 
-	test("leaves unknown $keys untouched", () => {
-		assert.strictEqual(SqlRiteCore.template("$known $missing", { known: 1 }), "1 $missing");
+	test("throws on an unbound $param instead of letting exec bind NULL", () => {
+		assert.throws(
+			() => SqlRiteCore.template("$known $missing", { known: 1 }),
+			/unbound parameter \$missing/,
+		);
+	});
+
+	test("throws on : and @ tokens too — exec NULLs every parameter style", () => {
+		assert.throws(() => SqlRiteCore.template("SELECT :x", undefined), /unbound parameter :x/);
+		assert.throws(() => SqlRiteCore.template("SELECT @x", undefined), /unbound parameter @x/);
+	});
+
+	test("dollar text inside string literals and comments is not a parameter", () => {
+		const sql =
+			"SELECT 'cost: $5' AS c; -- refine $later\n/* or $even later */ SELECT 'don''t $stop';";
+		assert.strictEqual(SqlRiteCore.template(sql, undefined), sql);
+	});
+
+	test("identifiers containing $ are legal SQLite, not parameters", () => {
+		assert.strictEqual(SqlRiteCore.template("SELECT a$b FROM t", undefined), "SELECT a$b FROM t");
 	});
 
 	test("returns SQL unchanged when params is absent", () => {
@@ -174,5 +192,53 @@ describe("SqlRiteCore.jsonify", () => {
 		assert.strictEqual(output.age, 20);
 		assert.strictEqual(output.id, 1);
 		assert.ok(!("$name" in output));
+	});
+
+	test("booleans bind as 1/0 (node:sqlite rejects raw booleans)", () => {
+		const output = SqlRiteCore.jsonify({ on: true, off: false });
+		assert.strictEqual(output.on, 1);
+		assert.strictEqual(output.off, 0);
+	});
+
+	test("TypedArrays pass through untouched for BLOB binding", () => {
+		const blob = new Uint8Array([1, 2, 3]);
+		assert.strictEqual(SqlRiteCore.jsonify({ blob }).blob, blob);
+	});
+
+	test("unbindable types throw a named error at the boundary", () => {
+		assert.throws(
+			() => SqlRiteCore.jsonify({ when: new Date() }),
+			/unsupported parameter type Date for \$when/,
+		);
+		assert.throws(
+			() => SqlRiteCore.jsonify({ m: new Map() }),
+			/unsupported parameter type Map for \$m/,
+		);
+		assert.throws(
+			() => SqlRiteCore.jsonify({ u: undefined }),
+			/unsupported parameter type undefined for \$u/,
+		);
+	});
+});
+
+describe("SqlRiteCore.parseSql reserved names", () => {
+	test("a tag that can never become a method throws at load", () => {
+		const file = `${DIR}/reserved.sql`;
+		fs.writeFileSync(file, "-- PREP: close\nSELECT 1;");
+		try {
+			assert.throws(() => SqlRiteCore.parseSql([file]), /"close" is a reserved name \(PREP/);
+		} finally {
+			fs.rmSync(file, { force: true });
+		}
+	});
+
+	test("INIT may use reserved words — it never becomes a method", () => {
+		const file = `${DIR}/reserved_init.sql`;
+		fs.writeFileSync(file, "-- INIT: open\nSELECT 1;");
+		try {
+			assert.strictEqual(SqlRiteCore.parseSql([file]).INIT.length, 1);
+		} finally {
+			fs.rmSync(file, { force: true });
+		}
 	});
 });

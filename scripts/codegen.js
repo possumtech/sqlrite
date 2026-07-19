@@ -37,7 +37,7 @@ export default class SqlRiteCore {
 	static loadChunks(options: SqlRiteOptions): Chunks;
 	static getFiles(dir: string): string[];
 	static parseSql(files: string[]): Chunks;
-	static template(sql: string, params?: Record<string, unknown>): string;
+	static template(sql: string, params?: Record<string, unknown>, context?: string): string;
 	static prepareMeta(db: DatabaseSync, bigint: boolean): StatementSync;
 	static result(metaStmt: StatementSync): {
 		changes: number | bigint;

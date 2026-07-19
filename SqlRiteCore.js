@@ -37,6 +37,14 @@ export default class SqlRiteCore {
 	// Connection-scoped write metadata. Read via setReadBigInts so a rowid past 2^53 is lossless.
 	static #META_SQL = "SELECT last_insert_rowid() AS lastInsertRowid, changes() AS changes";
 
+	// Names that can never become methods on either facade.
+	static #RESERVED = new Set(["constructor", "close", "open", "ready"]);
+
+	// One left-to-right pass consuming string literals, quoted identifiers, and
+	// comments, so a quote inside a comment (or -- inside a string) can't derail
+	// the strip. What survives is scanned for parameter-shaped tokens.
+	static #UNQUOTE_REGEX = /'(?:[^']|'')*'|"[^"]*"|--[^\n]*|\/\*[\s\S]*?\*\//g;
+
 	// Optional inline-flag prefix for REGEXP, e.g. `(?i)foo`. A native scoped group
 	// `(?i:...)` has a trailing colon, so it won't match here and passes through untouched.
 	static #REGEXP_FLAG_PREFIX = /^\(\?([a-z]+)\)/;
@@ -234,6 +242,10 @@ export default class SqlRiteCore {
 					continue;
 				}
 
+				if (type !== "INIT" && SqlRiteCore.#RESERVED.has(name)) {
+					throw new Error(`SqlRite: "${name}" is a reserved name (${type} in ${file})`);
+				}
+
 				const prev = type !== "INIT" ? seen.get(name) : undefined;
 				if (prev) {
 					console.warn(
@@ -267,6 +279,7 @@ export default class SqlRiteCore {
 			.toSorted((a, b) => a.version - b.version);
 
 		for (const m of pending) {
+			SqlRiteCore.#assertBound(m.sql, `MIGRATE ${m.version}`);
 			db.exec("BEGIN IMMEDIATE");
 			try {
 				// Re-check under the write lock: a concurrent opener may have won the race.
@@ -286,16 +299,38 @@ export default class SqlRiteCore {
 		}
 	}
 
-	static template(sql, params) {
-		if (!params) return sql;
-		return sql.replace(/\$(\w+)/g, (match, key) => {
-			if (!(key in params)) return match;
-			const value = params[key];
-			if (value === null) return "NULL";
-			if (typeof value === "number") return String(value);
-			if (typeof value === "boolean") return value ? "1" : "0";
-			return `'${String(value).replaceAll("'", "''")}'`;
-		});
+	/**
+	 * @param {string} sql
+	 * @param {Record<string, unknown>} [params]
+	 * @param {string} [context] Block identity for error messages.
+	 */
+	static template(sql, params, context = "SQL block") {
+		const templated = !params
+			? sql
+			: sql.replace(/\$(\w+)/g, (match, key) => {
+					if (!(key in params)) return match;
+					const value = params[key];
+					if (value === null) return "NULL";
+					if (typeof value === "number") return String(value);
+					if (typeof value === "boolean") return value ? "1" : "0";
+					return `'${String(value).replaceAll("'", "''")}'`;
+				});
+		SqlRiteCore.#assertBound(templated, context);
+		return templated;
+	}
+
+	/**
+	 * db.exec silently binds an unresolved parameter token as NULL — quiet data
+	 * loss. After templating, any parameter-shaped token outside string
+	 * literals, quoted identifiers, and comments is a fail-hard error. The
+	 * lookbehind spares identifiers containing $ (legal in SQLite: a$b).
+	 * @param {string} sql
+	 * @param {string} context
+	 */
+	static #assertBound(sql, context) {
+		const bare = sql.replace(SqlRiteCore.#UNQUOTE_REGEX, "");
+		const token = bare.match(/(?<!\w)[$:@]\w+/);
+		if (token) throw new Error(`SqlRite: unbound parameter ${token[0]} in ${context}`);
 	}
 
 	/**
@@ -324,15 +359,33 @@ export default class SqlRiteCore {
 
 		for (const [key, value] of Object.entries(params)) {
 			const cleanKey = key.replace(/^[$:@]/, "");
-			if (
-				Array.isArray(value) ||
-				(value !== null && typeof value === "object" && value.constructor?.name === "Object")
-			) {
-				result[cleanKey] = JSON.stringify(value);
-			} else {
-				result[cleanKey] = value;
-			}
+			result[cleanKey] = SqlRiteCore.#bindable(value, cleanKey);
 		}
 		return result;
+	}
+
+	/**
+	 * node:sqlite binds null, numbers, bigints, strings, and TypedArrays;
+	 * anything else dies there with a generic "cannot be bound". Convert what
+	 * has one honest SQL shape (boolean → 1/0, plain object/array → JSON) and
+	 * fail-hard, naming the parameter, on what doesn't.
+	 * @param {unknown} value
+	 * @param {string} key
+	 */
+	static #bindable(value, key) {
+		if (value === null) return null;
+		const type = typeof value;
+		if (type === "string" || type === "number" || type === "bigint") return value;
+		if (type === "boolean") return value ? 1 : 0;
+		if (type === "object") {
+			if (ArrayBuffer.isView(value)) return value;
+			const proto = Object.getPrototypeOf(value);
+			if (Array.isArray(value) || proto === Object.prototype || proto === null) {
+				return JSON.stringify(value);
+			}
+		}
+		throw new Error(
+			`SqlRite: unsupported parameter type ${value?.constructor?.name ?? type} for $${key}`,
+		);
 	}
 }

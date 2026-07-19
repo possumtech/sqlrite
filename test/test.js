@@ -279,6 +279,9 @@ test("EXEC params templating", () => {
 	assert.strictEqual(rows.length, 2);
 	assert.strictEqual(rows[0].val, "Alice");
 	assert.strictEqual(rows[1].val, "O'Brien");
+	// a missing param must throw at the boundary, not silently insert NULL
+	assert.throws(() => sql.insertKv({ key: "only" }), /unbound parameter \$val in EXEC insertKv/);
+	assert.strictEqual(sql.getAll.all().length, 2, "the failed call must not have written");
 	sql.close();
 	fs.rmSync("sql_exec_params", { recursive: true, force: true });
 });

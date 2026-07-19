@@ -7,7 +7,6 @@ export default class SqlRiteSync {
 	#metaNum;
 	/** @type {import("node:sqlite").StatementSync} */
 	#metaBig;
-	#protected = new Set(["close", "open", "constructor"]);
 
 	/**
 	 * @param {import("./SqlRiteCore.js").SqlRiteOptions} [options]
@@ -37,25 +36,24 @@ export default class SqlRiteSync {
 		SqlRiteCore.applyMigrations(this.#db, chunks.MIGRATE);
 
 		for (const init of chunks.INIT) {
-			this.#db.exec(SqlRiteCore.template(init.sql, merged.params));
+			this.#db.exec(SqlRiteCore.template(init.sql, merged.params, `INIT ${init.name}`));
 		}
 
 		for (const exec of chunks.EXEC) {
-			if (this.#protected.has(exec.name)) continue;
 			const meta = exec.bigint ? this.#metaBig : this.#metaNum;
 			this[exec.name] = (params) => {
-				this.#db.exec(SqlRiteCore.template(exec.sql, params));
+				this.#db.exec(SqlRiteCore.template(exec.sql, params, `EXEC ${exec.name}`));
 				return SqlRiteCore.result(meta);
 			};
 		}
 
 		for (const tx of chunks.TX) {
-			if (this.#protected.has(tx.name)) continue;
 			const meta = tx.bigint ? this.#metaBig : this.#metaNum;
 			this[tx.name] = (params) => {
+				const sql = SqlRiteCore.template(tx.sql, params, `TX ${tx.name}`);
 				this.#db.exec("BEGIN");
 				try {
-					this.#db.exec(SqlRiteCore.template(tx.sql, params));
+					this.#db.exec(sql);
 					this.#db.exec("COMMIT");
 				} catch (error) {
 					this.#db.exec("ROLLBACK");
@@ -66,7 +64,6 @@ export default class SqlRiteSync {
 		}
 
 		for (const prep of chunks.PREP) {
-			if (this.#protected.has(prep.name)) continue;
 			const stmt = this.#db.prepare(prep.sql);
 			if (prep.bigint) stmt.setReadBigInts(true);
 			const meta = prep.bigint ? this.#metaBig : this.#metaNum;

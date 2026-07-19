@@ -21,7 +21,7 @@ const chunks = SqlRiteCore.loadChunks(options);
 SqlRiteCore.applyMigrations(db, chunks.MIGRATE);
 
 for (const init of chunks.INIT) {
-	db.exec(SqlRiteCore.template(init.sql, options.params));
+	db.exec(SqlRiteCore.template(init.sql, options.params, `INIT ${init.name}`));
 }
 
 for (const exec of chunks.EXEC) {
@@ -57,12 +57,13 @@ port.on("message", (msg) => {
 	try {
 		let result;
 		if (type === "EXEC") {
-			db.exec(SqlRiteCore.template(execs.get(name), params));
+			db.exec(SqlRiteCore.template(execs.get(name), params, `EXEC ${name}`));
 			result = SqlRiteCore.result(metas.get(name));
 		} else if (type === "TX") {
+			const sql = SqlRiteCore.template(txs.get(name), params, `TX ${name}`);
 			db.exec("BEGIN");
 			try {
-				db.exec(SqlRiteCore.template(txs.get(name), params));
+				db.exec(sql);
 				db.exec("COMMIT");
 			} catch (error) {
 				db.exec("ROLLBACK");

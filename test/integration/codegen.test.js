@@ -41,7 +41,7 @@ describe("codegen CLI", () => {
 		assert.match(core, /export default class SqlRiteCore \{/);
 		assert.match(
 			core,
-			/static template\(sql: string, params\?: Record<string, unknown>\): string;/,
+			/static template\(sql: string, params\?: Record<string, unknown>, context\?: string\): string;/,
 		);
 	});
 
