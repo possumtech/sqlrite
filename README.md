@@ -1,5 +1,10 @@
 # SqlRite
 
+[![check](https://github.com/possumtech/sqlrite/actions/workflows/check.yml/badge.svg)](https://github.com/possumtech/sqlrite/actions/workflows/check.yml)
+[![npm](https://img.shields.io/npm/v/%40possumtech%2Fsqlrite)](https://www.npmjs.com/package/@possumtech/sqlrite)
+[![node](https://img.shields.io/node/v/%40possumtech%2Fsqlrite)](https://nodejs.org)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 SQL-first persistence for Node.js — a zero-dependency wrapper over the built-in
 `node:sqlite`. You write SQL in `.sql` files tagged with comment markers, and
 SqlRite turns each tagged block into a JavaScript method. No models, no query
@@ -127,6 +132,13 @@ Register your own with the `functions` option — see [SPEC.md](SPEC.md#function
 - `-- EXEC` / `-- TX` string-interpolate their values — **developer-authored SQL
   only**, never untrusted input.
 - `REGEXP` patterns must be trusted (ReDoS).
+
+## For AI agents
+
+[SPEC.md](SPEC.md) is the complete behavior contract; [AGENTS.md](AGENTS.md)
+has integration and contribution instructions. Discover any project's API by
+grepping its `.sql` tags (`-- PREP:`, `-- EXEC:`, `-- TX:`, `-- INIT:`). Both
+files ship in the npm package.
 
 ## License
 
