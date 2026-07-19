@@ -204,6 +204,26 @@ test("REGEXP inline flags", () => {
 	fs.rmSync("sql_regex_flags", { recursive: true, force: true });
 });
 
+test("REGEXP pattern cache is bounded (LRU eviction keeps matching correct)", () => {
+	fs.mkdirSync("sql_regex_lru", { recursive: true });
+	fs.writeFileSync(
+		"sql_regex_lru/001.sql",
+		"-- PREP: match\nSELECT $subject REGEXP $pattern AS r;",
+	);
+
+	const sql = new SqlRiteSync({ dir: "sql_regex_lru" });
+	// overflow the 256-entry bound with distinct runtime patterns
+	for (let i = 0; i < 300; i++) {
+		assert.strictEqual(sql.match.get({ subject: `x${i}`, pattern: `^x${i}$` }).r, 1);
+	}
+	// evicted long ago — recompiles and still matches; recent entry hits the cache
+	assert.strictEqual(sql.match.get({ subject: "x0", pattern: "^x0$" }).r, 1);
+	assert.strictEqual(sql.match.get({ subject: "x299", pattern: "^x299$" }).r, 1);
+
+	sql.close();
+	fs.rmSync("sql_regex_lru", { recursive: true, force: true });
+});
+
 test("uuid() function", () => {
 	fs.mkdirSync("sql_uuid", { recursive: true });
 	fs.writeFileSync(

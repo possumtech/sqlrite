@@ -37,6 +37,10 @@ export default class SqlRiteCore {
 	// `(?i:...)` has a trailing colon, so it won't match here and passes through untouched.
 	static #REGEXP_FLAG_PREFIX = /^\(\?([a-z]+)\)/;
 
+	// LRU bound for the per-connection REGEXP cache: authored patterns are few, but
+	// `col REGEXP other_col` feeds arbitrary runtime strings — unbounded, that leaks.
+	static #REGEXP_CACHE_MAX = 256;
+
 	// Connection posture. Spread under user options, so callers can override any of these.
 	static #HARDENED = Object.freeze({
 		enableForeignKeyConstraints: true, // enforce relational constraints
@@ -99,10 +103,15 @@ export default class SqlRiteCore {
 				if (pattern === null || string === null) return null;
 				const key = String(pattern);
 				let re = regexCache.get(key);
-				if (!re) {
+				if (re) {
+					regexCache.delete(key); // LRU: re-insertion below refreshes recency
+				} else {
 					re = SqlRiteCore.#compileRegExp(key);
-					regexCache.set(key, re);
+					if (regexCache.size >= SqlRiteCore.#REGEXP_CACHE_MAX) {
+						regexCache.delete(regexCache.keys().next().value);
+					}
 				}
+				regexCache.set(key, re);
 				// REGEXP is boolean over a cached, reused RegExp, so neutralize the stateful
 				// flags each row: `g` becomes a no-op and `y` (sticky) anchors at the start.
 				re.lastIndex = 0;

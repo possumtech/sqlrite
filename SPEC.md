@@ -185,7 +185,9 @@ you pass it; a non-integer (or out-of-range) value throws at open.
 ### Built-in
 
 - `REGEXP` — `col REGEXP $pattern` using JavaScript `RegExp`. Compiled patterns
-  are cached per connection. A `NULL` pattern or subject yields `NULL` (SQL
+  are cached per connection in a bounded LRU (256 patterns), so runtime-driven
+  patterns (`col REGEXP other_col`) cannot grow memory without limit — the
+  bound is not a ReDoS mitigation. A `NULL` pattern or subject yields `NULL` (SQL
   three-valued logic), never a match. An optional leading `(?flags)` sets RegExp
   flags — e.g. `(?i)^foo` for case-insensitive. `lastIndex` is reset per row, so
   the stateful flags are deterministic: `g` is a no-op (REGEXP is boolean) and
