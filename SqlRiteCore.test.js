@@ -140,6 +140,15 @@ describe("SqlRiteCore.template", () => {
 		assert.strictEqual(SqlRiteCore.template("SELECT a$b FROM t", undefined), "SELECT a$b FROM t");
 	});
 
+	test("dollar text via a param value is quoted, not re-scanned", () => {
+		// String.replace does not re-scan replacements; the value lands single-quoted,
+		// so the unbound-token check never sees it. The escape hatch for dollar text.
+		assert.strictEqual(
+			SqlRiteCore.template("INSERT INTO kv VALUES ($msg)", { msg: "costs $5 total" }),
+			"INSERT INTO kv VALUES ('costs $5 total')",
+		);
+	});
+
 	test("returns SQL unchanged when params is absent", () => {
 		assert.strictEqual(SqlRiteCore.template("SELECT 1", undefined), "SELECT 1");
 	});

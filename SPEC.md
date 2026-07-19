@@ -80,10 +80,12 @@ three modes:
   throws a named `unsupported parameter type` error at the boundary instead of
   dying in `node:sqlite`'s generic bind failure. Pass `date.toISOString()` (or
   epoch ms) explicitly.
-- JS `number` values bind as `REAL`: storage into `INTEGER` columns converts
-  losslessly (STRICT included), but SQL arithmetic on the bound value follows
-  `REAL` semantics — `$v / 3` divides as floats. Pass a `BigInt` for
-  integer-exact binding; it binds as `INTEGER` without any flag.
+- JS `number` values bind as `REAL` — integral or not: storage into `INTEGER`
+  columns converts losslessly (STRICT included), but SQL arithmetic on the
+  bound value follows `REAL` semantics — `$v / 3` divides as floats. The
+  [`bigint`](#bigint-flag) flag cannot help here; it governs reads only. Pass a
+  `BigInt` for integer-exact binding — it binds as `INTEGER` without any flag.
+  Verified on Node 26.3.1.
 - `.run()` returns `{ changes, lastInsertRowid }`, as do `-- EXEC` and `-- TX`.
   Both fields are `number` by default, `BigInt` with the [`bigint`](#bigint-flag)
   flag; without it, a `lastInsertRowid` past `2^53` throws rather than rounding.
@@ -101,7 +103,10 @@ After templating, any parameter-shaped token (`$x`, `:x`, `@x`) left outside
 string literals, quoted identifiers, and comments throws
 `unbound parameter … in EXEC <name>` — under `db.exec` it would otherwise
 silently bind `NULL`. Dollar text inside quotes (`'cost: $5'`) and identifiers
-containing `$` stay legal. The same check guards `-- TX` and `-- INIT`.
+containing `$` stay legal, and dollar text can also arrive via a param value:
+substituted values land single-quoted and replacements are not re-scanned, so
+`{ msg: "costs $5" }` templates clean. The same check guards `-- TX` and
+`-- INIT`.
 
 ```sql
 -- EXEC: insertKv
