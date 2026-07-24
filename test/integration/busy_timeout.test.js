@@ -18,7 +18,9 @@ before(() => {
 		"-- INIT: t\nCREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, v INTEGER) STRICT;\n" +
 			"-- EXEC: lock\nBEGIN IMMEDIATE;\n" +
 			"-- EXEC: unlock\nCOMMIT;\n" +
-			"-- PREP: put\nINSERT INTO t (v) VALUES ($v);",
+			"-- PREP: put\nINSERT INTO t (v) VALUES ($v);\n" +
+			"-- PREP: putReturning\nINSERT INTO t (v) VALUES ($v) RETURNING id;\n" +
+			"-- PREP: count\nSELECT COUNT(*) AS n FROM t;",
 	);
 });
 
@@ -42,6 +44,39 @@ describe("busy_timeout across connections", () => {
 
 		await writer.close();
 		holder.close();
+	});
+
+	test("reads bypass a writer waiting on the write lock", async () => {
+		const holder = new SqlRiteSync({ path: DB, dir: DIR });
+		const sql = await SqlRite.open({ path: DB, dir: DIR });
+		const before = (await sql.count.get()).n;
+
+		holder.lock();
+		const pendingWrite = sql.put.run({ v: 3 });
+		try {
+			const read = await Promise.race([
+				sql.count.get(),
+				delay(500).then(() => {
+					throw new Error("read queued behind the blocked writer");
+				}),
+			]);
+			assert.strictEqual(read.n, before, "reader must observe the last committed WAL snapshot");
+		} finally {
+			holder.unlock();
+			await pendingWrite;
+			await sql.close();
+			holder.close();
+		}
+	});
+
+	test("get fails hard when used with mutating SQL", async () => {
+		const sql = await SqlRite.open({ path: DB, dir: DIR });
+		const before = (await sql.count.get()).n;
+
+		await assert.rejects(() => sql.putReturning.get({ v: 4 }), /readonly database/);
+		assert.strictEqual((await sql.count.get()).n, before);
+
+		await sql.close();
 	});
 
 	test("timeout: 0 restores immediate SQLITE_BUSY", async () => {

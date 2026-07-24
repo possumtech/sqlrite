@@ -13,8 +13,10 @@ share one core:
 - `SqlRiteCore.js` — static utilities: file scan, tag parse, templating,
   PRAGMA/option setup, custom-function registration, write-metadata reads.
 - `SqlRiteSync.js` — sync facade over `DatabaseSync`.
-- `SqlRite.js` + `SqlWorker.js` — async facade; the DB lives in a Worker thread
-  behind a promise-keyed message protocol.
+- `SqlRite.js` + `SqlWorker.js` — async facade; file-backed databases use a
+  writer Worker plus a read-only Worker behind a promise-keyed message protocol.
+  In-memory databases use one Worker because SQLite connections do not share
+  `:memory:` databases.
 - `scripts/codegen.js` — emits `SqlRite.d.ts` for the generated methods.
 
 ## Paradigm & invariants
@@ -70,6 +72,12 @@ three modes:
 | `.get(params)` | single row | row object or `undefined` |
 | `.all(params)` | multiple rows | array of row objects |
 
+- On the async facade, file-backed `.get()` / `.all()` calls run on a separate
+  read-only connection while `.run()` / `-- EXEC` / `-- TX` stay on the writer.
+  A long write therefore does not block unrelated WAL-safe reads at the facade.
+  `.get()` and `.all()` are read operations by contract: mutating SQL used
+  through either mode fails on the read-only connection. Use `.run()` for
+  `INSERT` / `UPDATE` / `DELETE`.
 - Bind with named parameters (`$name`, `:name`, `@name`). The JS interface takes
   an object; a leading `$`/`:`/`@` on keys is stripped, so `{ name }` binds
   `$name`.
@@ -322,8 +330,16 @@ types.)
   on read rather than losing precision.
 - **`-- TX` returns no rows.** It returns only `{ changes, lastInsertRowid }`;
   read committed results with a separate `-- PREP`.
-- **Async serialization.** The async facade processes one Worker message at a
-  time; calls are serialized, not concurrent.
+- **Async ordering.** File-backed async instances have two FIFO lanes:
+  `.run()` / `-- EXEC` / `-- TX` use the writer; `.get()` / `.all()` use a
+  read-only connection. There is no total order across lanes. A concurrent read
+  sees the last committed WAL snapshot when that statement begins; await a write
+  before issuing a dependent read. In-memory instances retain one serialized
+  Worker because separate `:memory:` connections are separate databases.
+- **Reader connection scope.** Migrations and INIT finish before the async reader
+  opens, so their committed schema and data are visible. Connection-local state
+  created by INIT, such as TEMP tables, exists only on the writer and cannot be
+  used by async `.get()` / `.all()` statements.
 - **Idle instances don't hold the process.** The async facade unrefs its Worker
   whenever no call is in flight and refs it for each round-trip, so an unclosed
   instance can't pin the process while pending work is never dropped. Exiting
@@ -342,6 +358,10 @@ does not do.
   closure to its Worker, and a JS-composed transaction would violate SQL-first.
   Transactions are the declarative `-- TX` tag instead; the earlier
   `transaction(calls)` batch API was removed for the same reason.
+- **Read routing follows PREP modes, not another tag.** `.get()` / `.all()` are
+  already the read contract and `.run()` is the write contract. File-backed
+  async instances enforce that distinction with a read-only connection; adding
+  `GET` / `ALL` / `RUN` tags would duplicate result-mode selection in SQL.
 - **`busy_timeout` via the native `timeout` option, not a `busyTimeout` knob.**
   `DatabaseSync` already accepts `timeout`; SqlRite only defaults it non-zero
   (`5000` ms). A second PRAGMA-based option would be redundant.

@@ -3,8 +3,8 @@ import SqlRiteCore from "./SqlRiteCore.js";
 
 const port = /** @type {import("node:worker_threads").MessagePort} */ (parentPort);
 
-const { options } = workerData;
-const db = SqlRiteCore.openDb(options);
+const { options, readOnly = false } = workerData;
+const db = SqlRiteCore.openDb(readOnly ? { ...options, readOnly: true } : options);
 
 SqlRiteCore.initDb(db, options);
 await SqlRiteCore.registerFunctions(db, options.functions);
@@ -18,10 +18,12 @@ const metaBig = SqlRiteCore.prepareMeta(db, true);
 
 const chunks = SqlRiteCore.loadChunks(options);
 
-SqlRiteCore.applyMigrations(db, chunks.MIGRATE);
+if (!readOnly) {
+	SqlRiteCore.applyMigrations(db, chunks.MIGRATE);
 
-for (const init of chunks.INIT) {
-	db.exec(SqlRiteCore.template(init.sql, options.params, `INIT ${init.name}`));
+	for (const init of chunks.INIT) {
+		db.exec(SqlRiteCore.template(init.sql, options.params, `INIT ${init.name}`));
+	}
 }
 
 for (const exec of chunks.EXEC) {
@@ -45,8 +47,8 @@ for (const prep of chunks.PREP) {
 port.postMessage({
 	type: "READY",
 	names: {
-		EXEC: chunks.EXEC.map((e) => e.name),
-		TX: chunks.TX.map((t) => t.name),
+		EXEC: readOnly ? [] : chunks.EXEC.map((e) => e.name),
+		TX: readOnly ? [] : chunks.TX.map((t) => t.name),
 		PREP: chunks.PREP.map((p) => p.name),
 	},
 });
