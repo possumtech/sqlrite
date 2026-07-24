@@ -80,7 +80,7 @@ describe("-- MIGRATE (#12)", () => {
 		fs.writeFileSync(
 			`${DIR}/opener.mjs`,
 			`import SqlRite from "../SqlRite.js";\n` +
-				`const sql = await SqlRite.open({ path: "${seedDb}", dir: "${seed}" });\n` +
+				`const sql = await SqlRite.open({ path: "${seedDb}", dir: "${seed}", readers: 1 });\n` +
 				`await sql.close();\n`,
 		);
 		// Both processes race the same pending migration; BEGIN IMMEDIATE + the

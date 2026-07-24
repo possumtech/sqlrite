@@ -74,6 +74,7 @@ function generateTypes({ dir = "sql", output = "SqlRite.d.ts", base = false }) {
 		"	dir?: string | string[];",
 		"	functions?: string | string[];",
 		"	params?: Record<string, string | number | boolean | null>;",
+		"	readers?: number;",
 		"	timeout?: number;",
 		"	cacheSize?: number;",
 		"	mmapSize?: number;",

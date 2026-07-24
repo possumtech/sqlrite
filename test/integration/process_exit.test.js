@@ -20,7 +20,7 @@ before(() => {
 	fs.writeFileSync(
 		`${DIR}/child.mjs`,
 		`import SqlRite from "../SqlRite.js";\n` +
-			`const sql = await SqlRite.open({ path: "${DB}", dir: "${DIR}" });\n` +
+			`const sql = await SqlRite.open({ path: "${DB}", dir: "${DIR}", readers: 1 });\n` +
 			`await sql.put.run({ v: 1 });\n` +
 			`sql.put.run({ v: 2 }); // in flight at script end: must hold the process until it lands\n` +
 			`console.log("script end");\n`,

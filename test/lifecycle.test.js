@@ -30,19 +30,19 @@ describe("lifecycle / disposal", () => {
 	});
 
 	test("async close is idempotent", async () => {
-		const sql = await SqlRite.open({ path: DB, dir: DIR });
+		const sql = await SqlRite.open({ path: DB, dir: DIR, readers: 1 });
 		await sql.close();
 		await sql.close(); // second close must be a no-op, not throw
 	});
 
 	test("async Symbol.asyncDispose closes the worker", async () => {
-		const sql = await SqlRite.open({ path: DB, dir: DIR });
+		const sql = await SqlRite.open({ path: DB, dir: DIR, readers: 1 });
 		await sql[Symbol.asyncDispose]();
 		await assert.rejects(() => sql.count.get(), /closed/i);
 	});
 
 	test("async close drains a RETURNING call rerouted to the writer", async () => {
-		const sql = await SqlRite.open({ path: DB, dir: DIR });
+		const sql = await SqlRite.open({ path: DB, dir: DIR, readers: 1 });
 		const inserted = sql.addReturning.get({ v: 1 });
 		const closing = sql.close();
 

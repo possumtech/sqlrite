@@ -31,7 +31,7 @@ after(() => fs.rmSync(DIR, { recursive: true, force: true }));
 describe("busy_timeout across connections", () => {
 	test("default busy_timeout waits out a held write lock instead of SQLITE_BUSY", async () => {
 		const holder = new SqlRiteSync({ path: DB, dir: DIR });
-		const writer = await SqlRite.open({ path: DB, dir: DIR });
+		const writer = await SqlRite.open({ path: DB, dir: DIR, readers: 1 });
 
 		holder.lock();
 		let released = false;
@@ -50,7 +50,7 @@ describe("busy_timeout across connections", () => {
 
 	test("reads bypass a writer waiting on the write lock", async () => {
 		const holder = new SqlRiteSync({ path: DB, dir: DIR });
-		const sql = await SqlRite.open({ path: DB, dir: DIR });
+		const sql = await SqlRite.open({ path: DB, dir: DIR, readers: 1 });
 		const before = (await sql.count.get()).n;
 
 		holder.lock();
@@ -72,7 +72,7 @@ describe("busy_timeout across connections", () => {
 	});
 
 	test("get/all preserve mutation results by rerouting RETURNING statements", async () => {
-		const sql = await SqlRite.open({ path: DB, dir: DIR });
+		const sql = await SqlRite.open({ path: DB, dir: DIR, readers: 1 });
 		const before = (await sql.count.get()).n;
 
 		const inserted = await sql.putReturning.get({ v: 4 });
@@ -91,7 +91,7 @@ describe("busy_timeout across connections", () => {
 
 	test("timeout: 0 restores immediate SQLITE_BUSY", async () => {
 		const holder = new SqlRiteSync({ path: DB, dir: DIR });
-		const writer = await SqlRite.open({ path: DB, dir: DIR, timeout: 0 });
+		const writer = await SqlRite.open({ path: DB, dir: DIR, readers: 1, timeout: 0 });
 
 		holder.lock();
 		await assert.rejects(() => writer.put.run({ v: 2 }), /database is locked/);

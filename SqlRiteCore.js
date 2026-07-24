@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
  * @property {string|string[]} [dir] Directory or directories scanned for .sql files.
  * @property {string|string[]} [functions] Module path(s) for custom SQL functions.
  * @property {Record<string, string|number|boolean|null>} [params] $var substitutions for INIT blocks.
+ * @property {number} [readers] Async file-backed read Workers; defaults to max(0, availableParallelism() - 1).
  * @property {number} [timeout] busy_timeout in ms (default 5000); 0 restores immediate SQLITE_BUSY.
  * @property {number} [cacheSize] cache_size: positive = pages, negative = KiB of memory.
  * @property {number} [mmapSize] mmap_size: bytes of memory-mapped I/O; 0 disables. Inert on :memory:.

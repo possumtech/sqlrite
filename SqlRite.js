@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { Worker } from "node:worker_threads";
 import SqlRiteSync from "./SqlRiteSync.js";
 
@@ -8,8 +9,10 @@ export { SqlRiteSync };
 export default class SqlRite {
 	/** @type {import("node:worker_threads").Worker} */
 	#writer;
-	/** @type {import("node:worker_threads").Worker | undefined} */
-	#reader;
+	/** @type {import("node:worker_threads").Worker[]} */
+	#readers = [];
+	#readerCount;
+	#readerCursor = 0;
 	#id = 0;
 	/** @type {Map<number, { type: string, name?: string, params?: unknown, resolve: (value: unknown) => void, reject: (reason?: unknown) => void }>} */
 	#promises = new Map();
@@ -38,6 +41,17 @@ export default class SqlRite {
 			dir: "sql",
 		};
 		const merged = { ...defaults, ...options };
+		if (
+			merged.readers !== undefined &&
+			(!Number.isSafeInteger(merged.readers) || merged.readers < 0)
+		) {
+			throw new Error("SqlRite: readers must be a non-negative safe integer");
+		}
+		if (merged.path === ":memory:" && (merged.readers ?? 0) > 0) {
+			throw new Error("SqlRite: readers cannot be used with an in-memory database");
+		}
+		this.#readerCount =
+			merged.path === ":memory:" ? 0 : (merged.readers ?? Math.max(0, availableParallelism() - 1));
 
 		this.#writer = this.#createWorker(merged, false);
 		this.#readyPromise = this.#initialize(merged);
@@ -61,10 +75,10 @@ export default class SqlRite {
 	async #initialize(options) {
 		try {
 			const names = await this.#workerReady(this.#writer);
-			if (options.path !== ":memory:") {
-				this.#reader = this.#createWorker(options, true);
-				await this.#workerReady(this.#reader);
-			}
+			this.#readers = Array.from({ length: this.#readerCount }, () =>
+				this.#createWorker(options, true),
+			);
+			await Promise.all(this.#readers.map((reader) => this.#workerReady(reader)));
 			this.#setupMethods(names);
 			return this;
 		} catch (error) {
@@ -75,7 +89,7 @@ export default class SqlRite {
 	}
 
 	#workers() {
-		return this.#reader ? [this.#writer, this.#reader] : [this.#writer];
+		return [this.#writer, ...this.#readers];
 	}
 
 	#createWorker(options, readOnly) {
@@ -171,11 +185,28 @@ export default class SqlRite {
 		}
 		for (const name of names.PREP) {
 			this[name] = {
-				all: (params) => this.#callWorker(this.#reader ?? this.#writer, "PREP_ALL", name, params),
-				get: (params) => this.#callWorker(this.#reader ?? this.#writer, "PREP_GET", name, params),
+				all: (params) => this.#callWorker(this.#selectReader(), "PREP_ALL", name, params),
+				get: (params) => this.#callWorker(this.#selectReader(), "PREP_GET", name, params),
 				run: (params) => this.#callWorker(this.#writer, "PREP_RUN", name, params),
 			};
 		}
+	}
+
+	#selectReader() {
+		if (this.#readers.length === 0) return this.#writer;
+
+		let selected = this.#readerCursor;
+		let leastPending = Number.POSITIVE_INFINITY;
+		for (let offset = 0; offset < this.#readers.length; offset++) {
+			const index = (this.#readerCursor + offset) % this.#readers.length;
+			const pending = this.#pending.get(this.#readers[index]) ?? 0;
+			if (pending < leastPending) {
+				selected = index;
+				leastPending = pending;
+			}
+		}
+		this.#readerCursor = (selected + 1) % this.#readers.length;
+		return this.#readers[selected];
 	}
 
 	#send(worker, type, name, params) {

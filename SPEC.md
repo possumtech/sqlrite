@@ -14,9 +14,9 @@ share one core:
   PRAGMA/option setup, custom-function registration, write-metadata reads.
 - `SqlRiteSync.js` — sync facade over `DatabaseSync`.
 - `SqlRite.js` + `SqlWorker.js` — async facade; file-backed databases use a
-  writer Worker plus a read-only Worker behind a promise-keyed message protocol.
-  In-memory databases use one Worker because SQLite connections do not share
-  `:memory:` databases.
+  writer Worker plus a host-relative pool of read-only Workers behind a
+  promise-keyed message protocol. In-memory databases use one Worker because
+  SQLite connections do not share `:memory:` databases.
 - `scripts/codegen.js` — emits `SqlRite.d.ts` for the generated methods.
 
 ## Paradigm & invariants
@@ -72,13 +72,14 @@ three modes:
 | `.get(params)` | single row | row object or `undefined` |
 | `.all(params)` | multiple rows | array of row objects |
 
-- On the async facade, file-backed `.get()` / `.all()` calls first run on a
-  separate read-only connection while `.run()` / `-- EXEC` / `-- TX` stay on the
-  writer. A long write therefore does not block unrelated WAL-safe reads at the
-  facade. If SQLite rejects a `.get()` / `.all()` statement with
-  `SQLITE_READONLY`, SqlRite reroutes that call to the writer. This preserves
-  result-returning mutations such as `INSERT ... RETURNING` without attempting
-  to parse or classify SQL in JavaScript.
+- On the async facade, file-backed `.get()` / `.all()` calls first run on the
+  least-busy connection in a read-only pool while `.run()` / `-- EXEC` / `-- TX`
+  stay on the writer. Long writes and reads therefore do not impose
+  facade-level head-of-line blocking on unrelated WAL-safe reads. If SQLite
+  rejects a `.get()` / `.all()` statement with `SQLITE_READONLY`, SqlRite
+  reroutes that call to the writer. This preserves result-returning mutations
+  such as `INSERT ... RETURNING` without attempting to parse or classify SQL in
+  JavaScript.
 - Bind with named parameters (`$name`, `:name`, `@name`). The JS interface takes
   an object; a leading `$`/`:`/`@` on keys is stripped, so `{ name }` binds
   `$name`.
@@ -218,6 +219,7 @@ default, pass `readBigInts: true` in options (it passes through to
 | `dir` | `string \| string[]` | `"sql"` | Directories scanned for `.sql` files. |
 | `functions` | `string \| string[]` | — | Module paths for custom SQL functions. |
 | `params` | `object` | — | `$var` substitutions for `-- INIT` blocks. |
+| `readers` | non-negative safe integer | `max(0, availableParallelism() - 1)` | Async file-backed read-only Worker count. `0` routes every PREP mode through the writer; nonzero values are invalid with `:memory:`. |
 
 All other keys pass through to the `node:sqlite` `DatabaseSync` constructor (e.g.
 `readOnly`, `allowExtension`). Unknown keys are ignored; invalid option types
@@ -331,13 +333,13 @@ types.)
   on read rather than losing precision.
 - **`-- TX` returns no rows.** It returns only `{ changes, lastInsertRowid }`;
   read committed results with a separate `-- PREP`.
-- **Async ordering.** File-backed async instances have two FIFO lanes:
-  `.run()` / `-- EXEC` / `-- TX` use the writer; `.get()` / `.all()` first use a
-  read-only connection and reroute to the writer on `SQLITE_READONLY`. There is
-  no total order across lanes. A concurrent read sees the last committed WAL
-  snapshot when that statement begins; await an operation before issuing a
-  dependent one. In-memory instances retain one serialized Worker because
-  separate `:memory:` connections are separate databases.
+- **Async ordering.** File-backed async instances have one FIFO writer and a
+  least-pending read pool. `.run()` / `-- EXEC` / `-- TX` use the writer;
+  `.get()` / `.all()` first use a reader and reroute to the writer on
+  `SQLITE_READONLY`. There is no total order across lanes. A concurrent read
+  sees the last committed WAL snapshot when that statement begins; await an
+  operation before issuing a dependent one. In-memory instances and
+  `readers: 0` retain one serialized Worker.
 - **Reader connection scope.** Migrations and INIT finish before the async reader
   opens, so their committed schema and data are visible. Connection-local state
   created by INIT, such as TEMP tables, exists only on the writer and cannot be
@@ -360,11 +362,18 @@ does not do.
   closure to its Worker, and a JS-composed transaction would violate SQL-first.
   Transactions are the declarative `-- TX` tag instead; the earlier
   `transaction(calls)` batch API was removed for the same reason.
+- **Host-relative read pool.** The default read count is
+  `max(0, availableParallelism() - 1)`, leaving one reported execution lane for
+  the writer. `availableParallelism()` respects affinity and container limits;
+  the `readers` override lets a host application coordinate SqlRite with its
+  other Worker pools. Dispatch chooses the least-pending reader and rotates
+  ties, so a long read does not attract unrelated work while an idle reader
+  exists.
 - **SQLite classifies optimistic reads.** File-backed async `.get()` / `.all()`
-  calls try the read-only connection first. `SQLITE_READONLY` is an internal
-  routing result, not a swallowed failure: the same call runs on the writer and
-  returns its rows. This preserves `... RETURNING` and avoids a JavaScript SQL
-  parser or new `GET` / `ALL` / `RUN` tags.
+  calls try the read-only pool first. `SQLITE_READONLY` is an internal routing
+  result, not a swallowed failure: the same call runs on the writer and returns
+  its rows. This preserves `... RETURNING` and avoids a JavaScript SQL parser or
+  new `GET` / `ALL` / `RUN` tags.
 - **`busy_timeout` via the native `timeout` option, not a `busyTimeout` knob.**
   `DatabaseSync` already accepts `timeout`; SqlRite only defaults it non-zero
   (`5000` ms). A second PRAGMA-based option would be redundant.
