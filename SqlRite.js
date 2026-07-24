@@ -11,12 +11,17 @@ export default class SqlRite {
 	/** @type {import("node:worker_threads").Worker | undefined} */
 	#reader;
 	#id = 0;
-	/** @type {Map<number, { worker: import("node:worker_threads").Worker, resolve: (value: unknown) => void, reject: (reason?: unknown) => void }>} */
+	/** @type {Map<number, { type: string, name?: string, params?: unknown, resolve: (value: unknown) => void, reject: (reason?: unknown) => void }>} */
 	#promises = new Map();
 	/** @type {Map<import("node:worker_threads").Worker, number>} */
 	#pending = new Map();
+	/** @type {Array<() => void>} */
+	#drainResolvers = [];
 	/** @type {Promise<SqlRite>} */
 	#readyPromise;
+	/** @type {Promise<void> | undefined} */
+	#closePromise;
+	#closing = false;
 	#closed = false;
 
 	/**
@@ -81,7 +86,9 @@ export default class SqlRite {
 		worker.on("message", (msg) => this.#handleMessage(worker, msg));
 		worker.on("error", (error) => this.#fail(error));
 		worker.on("exit", (code) => {
-			if (!this.#closed) this.#fail(new Error(`Worker stopped with exit code ${code}`));
+			if (!this.#closing && !this.#closed) {
+				this.#fail(new Error(`Worker stopped with exit code ${code}`));
+			}
 		});
 		return worker;
 	}
@@ -118,11 +125,22 @@ export default class SqlRite {
 		const promise = this.#promises.get(msg.id);
 		if (!promise) return;
 		this.#promises.delete(msg.id);
+		this.#completeWorkerCall(worker);
+
+		if (msg.retry === true) {
+			this.#post(this.#writer, promise);
+			return;
+		}
+
+		if (msg.error !== undefined) promise.reject(msg.error);
+		else promise.resolve(msg.result);
+		this.#resolveDrain();
+	}
+
+	#completeWorkerCall(worker) {
 		const pending = (this.#pending.get(worker) ?? 1) - 1;
 		this.#pending.set(worker, pending);
 		if (pending === 0) worker.unref();
-		if (msg.error !== undefined) promise.reject(msg.error);
-		else promise.resolve(msg.result);
 	}
 
 	#rejectAll(err) {
@@ -134,6 +152,7 @@ export default class SqlRite {
 			this.#pending.set(worker, 0);
 			worker.unref();
 		}
+		this.#resolveDrain();
 	}
 
 	#fail(error) {
@@ -161,26 +180,49 @@ export default class SqlRite {
 
 	#send(worker, type, name, params) {
 		const { promise, resolve, reject } = Promise.withResolvers();
+		this.#post(worker, { type, name, params, resolve, reject });
+		return promise;
+	}
+
+	#post(worker, call) {
 		const id = this.#id++;
 		const pending = this.#pending.get(worker) ?? 0;
 		if (pending === 0) worker.ref();
 		this.#pending.set(worker, pending + 1);
-		this.#promises.set(id, { worker, resolve, reject });
-		worker.postMessage({ id, type, name, params });
-		return promise;
+		this.#promises.set(id, call);
+		worker.postMessage({ id, type: call.type, name: call.name, params: call.params });
 	}
 
 	async #callWorker(worker, type, name, params) {
-		if (this.#closed) throw new Error("SqlRite instance is closed");
+		if (this.#closing || this.#closed) throw new Error("SqlRite instance is closed");
 		await this.#readyPromise;
 		return this.#send(worker, type, name, params);
 	}
 
-	async close() {
-		if (this.#closed) return;
-		this.#closed = true;
+	#drain() {
+		if (this.#promises.size === 0) return Promise.resolve();
+		return new Promise((resolve) => this.#drainResolvers.push(() => resolve(undefined)));
+	}
+
+	#resolveDrain() {
+		if (this.#promises.size !== 0) return;
+		for (const resolve of this.#drainResolvers) resolve();
+		this.#drainResolvers = [];
+	}
+
+	close() {
+		if (this.#closePromise) return this.#closePromise;
+		this.#closing = true;
+		this.#closePromise = this.#close();
+		return this.#closePromise;
+	}
+
+	async #close() {
 		await this.#readyPromise.catch(() => {});
+		await this.#drain();
+		if (this.#closed) return;
 		await Promise.all(this.#workers().map((worker) => this.#send(worker, "CLOSE")));
+		this.#closed = true;
 	}
 
 	async [Symbol.asyncDispose]() {

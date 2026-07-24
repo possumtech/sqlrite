@@ -87,6 +87,16 @@ port.on("message", (msg) => {
 
 		port.postMessage({ id, result });
 	} catch (error) {
+		if (
+			readOnly &&
+			(type === "PREP_ALL" || type === "PREP_GET") &&
+			error instanceof Error &&
+			"errcode" in error &&
+			(Number(error.errcode) & 0xff) === 8
+		) {
+			port.postMessage({ id, retry: true });
+			return;
+		}
 		// postMessage structured-clones Errors: class, message, stack, and cause
 		// survive the boundary; non-standard own props (e.g. errcode) do not.
 		port.postMessage({ id, error });

@@ -55,10 +55,11 @@ const user = await sql.getUserByName.get({ name: "Alice" });
 ```
 
 Construct only via `open()` — the constructor throws otherwise. Methods return
-Promises. For file-backed databases, `.get()` / `.all()` use a read-only Worker
-so WAL-safe reads can proceed during a long write; `.run()` / `-- EXEC` /
-`-- TX` preserve order on the writer Worker. An idle instance does not hold the
-process open; `close()` (or `await using`) is still the clean shutdown.
+Promises. For file-backed databases, `.get()` / `.all()` first use a read-only
+Worker so WAL-safe reads can proceed during a long write; SQLite reroutes
+result-returning mutations to the writer. `.run()` / `-- EXEC` / `-- TX` use the
+writer directly. An idle instance does not hold the process open; `close()` (or
+`await using`) is still the clean shutdown.
 
 ### Sync
 
@@ -88,10 +89,11 @@ A `-- PREP` method exposes three modes:
 | `.get(params)` | one row | row object or `undefined` |
 | `.all(params)` | many rows | array of rows |
 
-- `.get()` and `.all()` are read operations. On the async facade they may run
-  concurrently with writes on a read-only connection and observe the last
-  committed WAL snapshot. Await a write before issuing a read that depends on
-  it. Use `.run()` for mutating statements.
+- On the async facade, `.get()` and `.all()` first try a read-only connection and
+  may complete concurrently with writes, observing the last committed WAL
+  snapshot. If the statement writes, SQLite rejects that lane and SqlRite
+  reroutes it to the writer, preserving `INSERT` / `UPDATE` / `DELETE ...
+  RETURNING`. Await an operation before issuing another that depends on it.
 - Bind with named parameters (`$name`, `:name`, `@name`). Pass an object; a
   leading `$`/`:`/`@` on keys is optional, so `{ name }` binds `$name`.
 - Object/array values are `JSON.stringify`-ed on the way in; output is **not**

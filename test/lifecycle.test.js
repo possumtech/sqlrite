@@ -4,13 +4,15 @@ import { after, before, describe, test } from "node:test";
 import SqlRite, { SqlRiteSync } from "../SqlRite.js";
 
 const DIR = "sql_lifecycle";
+const DB = `${DIR}/lifecycle.db`;
 
 before(() => {
 	fs.mkdirSync(DIR, { recursive: true });
 	fs.writeFileSync(
 		`${DIR}/001.sql`,
-		"-- INIT: t\nCREATE TABLE t (id INTEGER PRIMARY KEY, v INTEGER) STRICT;\n" +
-			"-- PREP: count\nSELECT COUNT(*) AS n FROM t;",
+		"-- INIT: t\nCREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, v INTEGER) STRICT;\n" +
+			"-- PREP: count\nSELECT COUNT(*) AS n FROM t;\n" +
+			"-- PREP: addReturning\nINSERT INTO t (v) VALUES ($v) RETURNING id;",
 	);
 });
 
@@ -28,14 +30,23 @@ describe("lifecycle / disposal", () => {
 	});
 
 	test("async close is idempotent", async () => {
-		const sql = await SqlRite.open({ dir: DIR });
+		const sql = await SqlRite.open({ path: DB, dir: DIR });
 		await sql.close();
 		await sql.close(); // second close must be a no-op, not throw
 	});
 
 	test("async Symbol.asyncDispose closes the worker", async () => {
-		const sql = await SqlRite.open({ dir: DIR });
+		const sql = await SqlRite.open({ path: DB, dir: DIR });
 		await sql[Symbol.asyncDispose]();
 		await assert.rejects(() => sql.count.get(), /closed/i);
+	});
+
+	test("async close drains a RETURNING call rerouted to the writer", async () => {
+		const sql = await SqlRite.open({ path: DB, dir: DIR });
+		const inserted = sql.addReturning.get({ v: 1 });
+		const closing = sql.close();
+
+		assert.strictEqual(typeof (await inserted).id, "number");
+		await closing;
 	});
 });

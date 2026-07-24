@@ -20,6 +20,8 @@ before(() => {
 			"-- EXEC: unlock\nCOMMIT;\n" +
 			"-- PREP: put\nINSERT INTO t (v) VALUES ($v);\n" +
 			"-- PREP: putReturning\nINSERT INTO t (v) VALUES ($v) RETURNING id;\n" +
+			"-- PREP: updateReturning\nUPDATE t SET v = $v WHERE id = $id RETURNING id, v;\n" +
+			"-- PREP: deleteReturning\nDELETE FROM t WHERE id = $id RETURNING id, v;\n" +
 			"-- PREP: count\nSELECT COUNT(*) AS n FROM t;",
 	);
 });
@@ -69,11 +71,19 @@ describe("busy_timeout across connections", () => {
 		}
 	});
 
-	test("get fails hard when used with mutating SQL", async () => {
+	test("get/all preserve mutation results by rerouting RETURNING statements", async () => {
 		const sql = await SqlRite.open({ path: DB, dir: DIR });
 		const before = (await sql.count.get()).n;
 
-		await assert.rejects(() => sql.putReturning.get({ v: 4 }), /readonly database/);
+		const inserted = await sql.putReturning.get({ v: 4 });
+		assert.strictEqual(typeof inserted.id, "number");
+		assert.deepStrictEqual(await sql.updateReturning.all({ id: inserted.id, v: 5 }), [
+			{ id: inserted.id, v: 5 },
+		]);
+		assert.deepStrictEqual(await sql.deleteReturning.get({ id: inserted.id }), {
+			id: inserted.id,
+			v: 5,
+		});
 		assert.strictEqual((await sql.count.get()).n, before);
 
 		await sql.close();
