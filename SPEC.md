@@ -300,10 +300,12 @@ signature so your dynamic methods type as `any` out of the box. Sharpen to
 exact per-method types by generating from your `.sql` files:
 
 ```bash
-node node_modules/@possumtech/sqlrite/scripts/codegen.js [dir]   # default dir "sql"
+node node_modules/@possumtech/sqlrite/scripts/codegen.js [dir ...]   # default dir "sql"
 ```
 
-This writes `SqlRite.d.ts` into your project; point TypeScript at it with a
+Every directory argument participates in the same generated statement surface,
+matching the runtime `dir: string[]` contract. This writes `SqlRite.d.ts` into
+your project; point TypeScript at it with a
 `paths` override, which takes precedence over the shipped types:
 
 ```json

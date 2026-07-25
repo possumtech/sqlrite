@@ -11,12 +11,17 @@ const DIR = "sql_codegen";
 
 before(() => {
 	fs.mkdirSync(`${DIR}/gen/sql`, { recursive: true });
+	fs.mkdirSync(`${DIR}/gen/migrations`, { recursive: true });
 	fs.mkdirSync(`${DIR}/base`, { recursive: true });
 	fs.writeFileSync(
 		`${DIR}/gen/sql/001.sql`,
 		"-- PREP: findUser bigint\nSELECT * FROM users WHERE id = $id;\n" +
 			"-- EXEC: vacuumDb\nVACUUM;\n" +
 			"-- TX: moveFunds\nUPDATE a SET b = 1;",
+	);
+	fs.writeFileSync(
+		`${DIR}/gen/migrations/002.sql`,
+		"-- PREP: currentVersion\nPRAGMA user_version;",
 	);
 });
 
@@ -57,5 +62,12 @@ describe("codegen CLI", () => {
 			/\[method: string\]/,
 			"generated types must be strict — no index signature",
 		);
+	});
+
+	test("multiple directory arguments generate one exact method surface", async () => {
+		await run(process.execPath, [CODEGEN, "sql", "migrations"], { cwd: `${DIR}/gen` });
+		const dts = fs.readFileSync(`${DIR}/gen/SqlRite.d.ts`, "utf8");
+		assert.match(dts, /findUser: SqlRiteBigIntPreparedStatements;/);
+		assert.match(dts, /currentVersion: SqlRitePreparedStatements;/);
 	});
 });

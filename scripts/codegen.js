@@ -47,6 +47,9 @@ export default class SqlRiteCore {
 }
 `;
 
+/**
+ * @param {{ dir?: string | string[], output?: string, base?: boolean }} options
+ */
 function generateTypes({ dir = "sql", output = "SqlRite.d.ts", base = false }) {
 	// --base emits only the static surface (the shipped package types); no .sql scan.
 	let chunks = /** @type {import("../SqlRiteCore.js").Chunks} */ ({
@@ -176,4 +179,4 @@ const { values, positionals } = parseArgs({
 	options: { base: { type: "boolean", default: false } },
 	allowPositionals: true,
 });
-generateTypes({ dir: positionals[0] ?? "sql", base: values.base });
+generateTypes({ dir: positionals.length > 0 ? positionals : "sql", base: values.base });
