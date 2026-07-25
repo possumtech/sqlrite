@@ -55,6 +55,8 @@ describe("codegen CLI", () => {
 		await run(process.execPath, [CODEGEN], { cwd: `${DIR}/gen` });
 		const dts = fs.readFileSync(`${DIR}/gen/SqlRite.d.ts`, "utf8");
 		assert.match(dts, /findUser: SqlRiteBigIntPreparedStatements;/);
+		assert.match(dts, /all<R = T>\(params\?: P\): Promise<R\[]>;/);
+		assert.match(dts, /get<R = T>\(params\?: P\): Promise<R \| undefined>;/);
 		assert.match(dts, /vacuumDb\(params\?: Record<string, unknown>\): Promise<SqlRiteResult>;/);
 		assert.match(dts, /moveFunds\(params\?: Record<string, unknown>\): SqlRiteResult;/);
 		assert.doesNotMatch(

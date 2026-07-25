@@ -313,8 +313,10 @@ your project; point TypeScript at it with a
 ```
 
 The generated file drops the index signature, so a typo'd method name is a
-type error. Re-run after adding or renaming tags. (`--base` regenerates the
-static-only surface; the library's `prepack` uses it to build the shipped
+type error. Result shapes remain caller-supplied and may be stated at the
+operation, as in `db.findUser.get<User>({ id })`; codegen does not infer SQL
+result columns. Re-run after adding or renaming tags. (`--base` regenerates
+the static-only surface; the library's `prepack` uses it to build the shipped
 types.)
 
 ## Limits & security
