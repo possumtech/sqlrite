@@ -41,11 +41,6 @@ export default class SqlRiteCore {
 	// Names that can never become methods on either facade.
 	static #RESERVED = new Set(["constructor", "close", "open", "ready"]);
 
-	// One left-to-right pass consuming string literals, quoted identifiers, and
-	// comments, so a quote inside a comment (or -- inside a string) can't derail
-	// the strip. What survives is scanned for parameter-shaped tokens.
-	static #UNQUOTE_REGEX = /'(?:[^']|'')*'|"[^"]*"|--[^\n]*|\/\*[\s\S]*?\*\//g;
-
 	// Optional inline-flag prefix for REGEXP, e.g. `(?i)foo`. A native scoped group
 	// `(?i:...)` has a trailing colon, so it won't match here and passes through untouched.
 	static #REGEXP_FLAG_PREFIX = /^\(\?([a-z]+)\)/;
@@ -323,15 +318,60 @@ export default class SqlRiteCore {
 	/**
 	 * db.exec silently binds an unresolved parameter token as NULL — quiet data
 	 * loss. After templating, any parameter-shaped token outside string
-	 * literals, quoted identifiers, and comments is a fail-hard error. The
-	 * lookbehind spares identifiers containing $ (legal in SQLite: a$b).
+	 * literals, quoted identifiers, and comments is a fail-hard error.
 	 * @param {string} sql
 	 * @param {string} context
 	 */
 	static #assertBound(sql, context) {
-		const bare = sql.replace(SqlRiteCore.#UNQUOTE_REGEX, "");
-		const token = bare.match(/(?<!\w)[$:@]\w+/);
-		if (token) throw new Error(`SqlRite: unbound parameter ${token[0]} in ${context}`);
+		for (let i = 0; i < sql.length; i++) {
+			const char = sql[i];
+
+			if (char === "'" || char === '"') {
+				const quote = char;
+				while (++i < sql.length) {
+					if (sql[i] !== quote) continue;
+					if (sql[i + 1] === quote) {
+						i++;
+						continue;
+					}
+					break;
+				}
+				continue;
+			}
+
+			if (char === "-" && sql[i + 1] === "-") {
+				const end = sql.indexOf("\n", i + 2);
+				if (end === -1) return;
+				i = end;
+				continue;
+			}
+
+			if (char === "/" && sql[i + 1] === "*") {
+				const end = sql.indexOf("*/", i + 2);
+				if (end === -1) return;
+				i = end + 1;
+				continue;
+			}
+
+			if (
+				(char === "$" || char === ":" || char === "@") &&
+				!SqlRiteCore.#isWord(sql.charCodeAt(i - 1)) &&
+				SqlRiteCore.#isWord(sql.charCodeAt(i + 1))
+			) {
+				let end = i + 2;
+				while (SqlRiteCore.#isWord(sql.charCodeAt(end))) end++;
+				throw new Error(`SqlRite: unbound parameter ${sql.slice(i, end)} in ${context}`);
+			}
+		}
+	}
+
+	static #isWord(code) {
+		return (
+			(code >= 48 && code <= 57) ||
+			(code >= 65 && code <= 90) ||
+			code === 95 ||
+			(code >= 97 && code <= 122)
+		);
 	}
 
 	/**

@@ -132,8 +132,21 @@ describe("SqlRiteCore.template", () => {
 
 	test("dollar text inside string literals and comments is not a parameter", () => {
 		const sql =
-			"SELECT 'cost: $5' AS c; -- refine $later\n/* or $even later */ SELECT 'don''t $stop';";
+			`SELECT 'cost: $5' AS c, "quoted""$identifier"; -- refine $later\n` +
+			"/* or $even later */ SELECT 'don''t $stop';";
 		assert.strictEqual(SqlRiteCore.template(sql, undefined), sql);
+	});
+
+	test("ignores parameter text in a pathological unterminated block comment", () => {
+		const sql = `SELECT 1; /*${" /*".repeat(3_200)} $hidden`;
+		assert.strictEqual(SqlRiteCore.template(sql, undefined), sql);
+	});
+
+	test("detects a parameter immediately after an ignored region", () => {
+		assert.throws(
+			() => SqlRiteCore.template("SELECT 1 /* ignored */$missing", undefined),
+			/unbound parameter \$missing/,
+		);
 	});
 
 	test("identifiers containing $ are legal SQLite, not parameters", () => {
