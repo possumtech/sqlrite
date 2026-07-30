@@ -1,5 +1,11 @@
 # AGENTS.md
 
+In a checkout directly under `~/ptl`, read `../POSSUMTECH.md` before applying
+the project guidance below, and stop if that workspace contract is unavailable.
+It owns agent identity, forge roles, and project coordination. This file owns
+SqlRite's public behavior and contribution contract and stands alone in
+distributed copies outside that workspace.
+
 Instructions for AI agents. [SPEC.md](SPEC.md) is the complete behavior
 contract — read it before writing code against or inside this library.
 
