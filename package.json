@@ -61,7 +61,7 @@
 		"test": "node --experimental-test-coverage --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 --test",
 		"debug": "node --experimental-test-coverage --trace-warnings --inspect-brk --test",
 		"typecheck": "tsc",
-		"check": "npm run lint && npm run typecheck && npm test",
+		"check": "npm run lint:ci && npm run typecheck && npm test",
 		"build:types": "node scripts/codegen.js",
 		"prepack": "node scripts/codegen.js --base",
 		"postpack": "node -e \"for (const f of ['SqlRite.d.ts', 'SqlRiteSync.d.ts', 'SqlRiteCore.d.ts']) require('node:fs').rmSync(f, { force: true });\""

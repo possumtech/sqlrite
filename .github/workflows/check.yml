@@ -18,6 +18,4 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm ci
-      - run: npm run lint:ci
-      - run: npm run typecheck
-      - run: npm test
+      - run: npm run check
