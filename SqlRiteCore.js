@@ -40,6 +40,10 @@ export default class SqlRiteCore {
 
 	// Names that can never become methods on either facade.
 	static #RESERVED = new Set(["constructor", "close", "open", "ready"]);
+	static #DEFAULT_TIMEOUT = 5000;
+	static #SQLITE_BUSY = 5;
+	static #BUSY_RETRY_INTERVAL = 10;
+	static #BUSY_WAIT = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 
 	// Optional inline-flag prefix for REGEXP, e.g. `(?i)foo`. A native scoped group
 	// `(?i:...)` has a trailing colon, so it won't match here and passes through untouched.
@@ -86,7 +90,56 @@ export default class SqlRiteCore {
 	static openDb(options) {
 		// timeout (busy_timeout, ms): non-zero default so concurrent writers wait instead of an
 		// immediate SQLITE_BUSY, completing the WAL posture. Native option; overridable by the user.
-		return new DatabaseSync(options.path, { timeout: 5000, ...SqlRiteCore.#HARDENED, ...options });
+		return new DatabaseSync(options.path, {
+			timeout: SqlRiteCore.#DEFAULT_TIMEOUT,
+			...SqlRiteCore.#HARDENED,
+			...options,
+		});
+	}
+
+	static #isBusy(error) {
+		return (
+			error instanceof Error &&
+			"errcode" in error &&
+			(Number(error.errcode) & 0xff) === SqlRiteCore.#SQLITE_BUSY
+		);
+	}
+
+	/**
+	 * @param {DatabaseSync} db
+	 * @param {string} sql
+	 * @param {number} configuredTimeout
+	 */
+	static #execWithBusyRetry(db, sql, configuredTimeout) {
+		// SQLite may skip its busy handler to break a lock-upgrade deadlock. WAL setup
+		// is idempotent, so this one posture operation can safely retry; client SQL cannot.
+		const timeout = Number.isSafeInteger(configuredTimeout) ? Math.max(0, configuredTimeout) : 0;
+		const deadline = performance.now() + timeout;
+		let adjustedTimeout = false;
+
+		try {
+			for (;;) {
+				try {
+					db.exec(sql);
+					return;
+				} catch (error) {
+					const remaining = deadline - performance.now();
+					if (!SqlRiteCore.#isBusy(error) || remaining <= 0) throw error;
+
+					Atomics.wait(
+						SqlRiteCore.#BUSY_WAIT,
+						0,
+						0,
+						Math.min(SqlRiteCore.#BUSY_RETRY_INTERVAL, remaining),
+					);
+					const retryTimeout = Math.max(0, Math.ceil(deadline - performance.now()));
+					db.exec(`PRAGMA busy_timeout = ${retryTimeout};`);
+					adjustedTimeout = true;
+				}
+			}
+		} finally {
+			if (adjustedTimeout) db.exec(`PRAGMA busy_timeout = ${timeout};`);
+		}
 	}
 
 	/**
@@ -94,7 +147,11 @@ export default class SqlRiteCore {
 	 * @param {SqlRiteOptions} [options]
 	 */
 	static initDb(db, options = {}) {
-		db.exec("PRAGMA journal_mode = WAL;");
+		SqlRiteCore.#execWithBusyRetry(
+			db,
+			"PRAGMA journal_mode = WAL;",
+			options.timeout ?? SqlRiteCore.#DEFAULT_TIMEOUT,
+		);
 		db.exec("PRAGMA synchronous = NORMAL;");
 
 		for (const { option, pragma, ok, want } of SqlRiteCore.#TUNING) {

@@ -86,6 +86,96 @@ describe("tuning knobs", () => {
 		db.close();
 	});
 
+	test("WAL setup retries an immediate SQLITE_BUSY within timeout", () => {
+		const db = SqlRiteCore.openDb({ path: ":memory:", timeout: 100 });
+		const exec = db.exec.bind(db);
+		let attempts = 0;
+		db.exec = (sql) => {
+			if (sql === "PRAGMA journal_mode = WAL;") {
+				attempts += 1;
+				if (attempts < 3) {
+					throw Object.assign(new Error("database is locked"), { errcode: 5 });
+				}
+			}
+			return exec(sql);
+		};
+
+		try {
+			SqlRiteCore.initDb(db, { timeout: 100 });
+			assert.strictEqual(attempts, 3);
+			assert.strictEqual(pragma(db, "busy_timeout"), 100, "busy timeout must be restored");
+		} finally {
+			db.close();
+		}
+	});
+
+	test("WAL setup preserves immediate BUSY when timeout is zero", () => {
+		const db = SqlRiteCore.openDb({ path: ":memory:", timeout: 0 });
+		const exec = db.exec.bind(db);
+		const busy = Object.assign(new Error("database is locked"), { errcode: 5 });
+		let attempts = 0;
+		db.exec = (sql) => {
+			if (sql !== "PRAGMA journal_mode = WAL;") return exec(sql);
+			attempts += 1;
+			throw busy;
+		};
+
+		try {
+			assert.throws(
+				() => SqlRiteCore.initDb(db, { timeout: 0 }),
+				(error) => error === busy,
+			);
+			assert.strictEqual(attempts, 1);
+		} finally {
+			db.close();
+		}
+	});
+
+	test("WAL setup stops retrying when timeout expires", () => {
+		const db = SqlRiteCore.openDb({ path: ":memory:", timeout: 20 });
+		const exec = db.exec.bind(db);
+		const busy = Object.assign(new Error("database is locked"), { errcode: 5 });
+		let attempts = 0;
+		db.exec = (sql) => {
+			if (sql !== "PRAGMA journal_mode = WAL;") return exec(sql);
+			attempts += 1;
+			throw busy;
+		};
+
+		try {
+			assert.throws(
+				() => SqlRiteCore.initDb(db, { timeout: 20 }),
+				(error) => error === busy,
+			);
+			assert.ok(attempts > 1, "positive timeout must permit retry");
+			assert.strictEqual(pragma(db, "busy_timeout"), 20, "busy timeout must be restored");
+		} finally {
+			db.close();
+		}
+	});
+
+	test("WAL setup preserves non-BUSY errors without retry", () => {
+		const db = SqlRiteCore.openDb({ path: ":memory:" });
+		const exec = db.exec.bind(db);
+		const failure = new Error("posture failed");
+		let attempts = 0;
+		db.exec = (sql) => {
+			if (sql !== "PRAGMA journal_mode = WAL;") return exec(sql);
+			attempts += 1;
+			throw failure;
+		};
+
+		try {
+			assert.throws(
+				() => SqlRiteCore.initDb(db),
+				(error) => error === failure,
+			);
+			assert.strictEqual(attempts, 1);
+		} finally {
+			db.close();
+		}
+	});
+
 	test("cacheSize applies as a signed cache_size (negative = KiB)", () => {
 		const db = SqlRiteCore.openDb({ path: ":memory:" });
 		SqlRiteCore.initDb(db, { cacheSize: -4000 });

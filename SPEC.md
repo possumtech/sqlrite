@@ -239,7 +239,7 @@ key in your own options:
 | `enableForeignKeyConstraints` | `true` | Enforces foreign keys. |
 | `enableDoubleQuotedStringLiterals` | `false` | Rejects double-quoted string literals (a misspelled `"identifier"` errors instead of becoming a string). |
 | `defensive` | `true` | Blocks SQL that can corrupt the file: `writable_schema`, `journal_mode=OFF`, `schema_version`, shadow-table writes. |
-| `timeout` | `5000` | `busy_timeout` in ms — concurrent writers wait instead of an immediate `SQLITE_BUSY`, completing the WAL posture. Set `0` to restore the bare-`node:sqlite` behavior. |
+| `timeout` | `5000` | `busy_timeout` in ms — bounds ordinary lock waits and SqlRite's retry of idempotent WAL setup when SQLite bypasses its busy handler. Set `0` to preserve an immediate `SQLITE_BUSY`. |
 
 ### Tuning knobs
 
