@@ -1,4 +1,3 @@
-import { availableParallelism } from "node:os";
 import { Worker } from "node:worker_threads";
 import SqlRiteSync from "./SqlRiteSync.js";
 
@@ -50,8 +49,7 @@ export default class SqlRite {
 		if (merged.path === ":memory:" && (merged.readers ?? 0) > 0) {
 			throw new Error("SqlRite: readers cannot be used with an in-memory database");
 		}
-		this.#readerCount =
-			merged.path === ":memory:" ? 0 : (merged.readers ?? Math.max(0, availableParallelism() - 1));
+		this.#readerCount = merged.path === ":memory:" ? 0 : (merged.readers ?? 1);
 
 		this.#writer = this.#createWorker(merged, false);
 		this.#readyPromise = this.#initialize(merged);

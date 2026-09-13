@@ -1,28 +1,35 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { availableParallelism } from "node:os";
 import { after, before, describe, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import SqlRite from "../../SqlRite.js";
 
 const DIR = "sql_read_pool";
 const DB = `${DIR}/pool.db`;
-const FUNCTIONS = `${DIR}/functions`;
+const FUNCTION_DIR = `${DIR}/functions`;
+const FUNCTIONS = [`${FUNCTION_DIR}/sleep.js`, `${FUNCTION_DIR}/workerId.js`];
 
 before(() => {
-	fs.mkdirSync(FUNCTIONS, { recursive: true });
+	fs.mkdirSync(FUNCTION_DIR, { recursive: true });
 	fs.writeFileSync(
 		`${DIR}/001.sql`,
 		"-- INIT: t\nCREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, v INTEGER) STRICT;\n" +
+			"-- INIT: workers\nCREATE TABLE IF NOT EXISTS workers (id INTEGER NOT NULL) STRICT;\n" +
+			"-- EXEC: recordWriter\nDELETE FROM workers; INSERT INTO workers (id) VALUES (workerId());\n" +
+			"-- PREP: workerIds\nSELECT (SELECT id FROM workers LIMIT 1) AS writer, workerId() AS reader;\n" +
 			"-- PREP: slow\nSELECT sleep($ms) AS waited;\n" +
 			"-- PREP: quick\nSELECT 1 AS n;",
 	);
 	fs.writeFileSync(
-		`${FUNCTIONS}/sleep.js`,
+		`${FUNCTION_DIR}/sleep.js`,
 		"export default (ms) => {\n" +
 			"\tAtomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(ms));\n" +
 			"\treturn ms;\n" +
 			"};\n",
+	);
+	fs.writeFileSync(
+		`${FUNCTION_DIR}/workerId.js`,
+		'import { threadId } from "node:worker_threads";\nexport default () => threadId;\n',
 	);
 });
 
@@ -33,7 +40,7 @@ describe("async read Worker pool (#14)", () => {
 		const sql = await SqlRite.open({
 			path: DB,
 			dir: DIR,
-			functions: `${FUNCTIONS}/sleep.js`,
+			functions: FUNCTIONS,
 			readers: 2,
 		});
 		const started = performance.now();
@@ -48,7 +55,7 @@ describe("async read Worker pool (#14)", () => {
 		const sql = await SqlRite.open({
 			path: DB,
 			dir: DIR,
-			functions: `${FUNCTIONS}/sleep.js`,
+			functions: FUNCTIONS,
 			readers: 2,
 		});
 		const short = sql.slow.get({ ms: 200 });
@@ -68,27 +75,29 @@ describe("async read Worker pool (#14)", () => {
 		await sql.close();
 	});
 
-	test("default reader count follows availableParallelism", {
-		skip: availableParallelism() < 3,
-	}, async () => {
+	test("default uses exactly one reader separate from the writer", async () => {
 		const sql = await SqlRite.open({
 			path: DB,
 			dir: DIR,
-			functions: `${FUNCTIONS}/sleep.js`,
+			functions: FUNCTIONS,
 		});
-		const started = performance.now();
+		try {
+			await sql.recordWriter();
+			const first = await sql.workerIds.get();
+			const second = await sql.workerIds.get();
 
-		await Promise.all([sql.slow.get({ ms: 600 }), sql.slow.get({ ms: 600 })]);
-
-		assert.ok(performance.now() - started < 1_050, "default must provide multiple readers");
-		await sql.close();
+			assert.notStrictEqual(first.reader, first.writer, "default must preserve a reader lane");
+			assert.strictEqual(second.reader, first.reader, "default must create only one reader");
+		} finally {
+			await sql.close();
+		}
 	});
 
 	test("readers: 0 serializes PREP modes through the writer", async () => {
 		const sql = await SqlRite.open({
 			path: DB,
 			dir: DIR,
-			functions: `${FUNCTIONS}/sleep.js`,
+			functions: FUNCTIONS,
 			readers: 0,
 		});
 		assert.strictEqual((await sql.quick.get()).n, 1);

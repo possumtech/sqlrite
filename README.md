@@ -12,7 +12,7 @@ builder, no implicit `find`/`save` — every operation is an explicit SQL block 
 can read.
 
 - Requires Node `>=26.0.0`, npm `>=11.1.0`. Zero runtime dependencies.
-- Two facades over one core: **async** (DB in a Worker thread) and **sync**.
+- Two facades over one core: **async** (DB work in Worker threads) and **sync**.
 
 > Full reference — exhaustive tag/option semantics, the design contract, security
 > limits, and maintainer notes — lives in [SPEC.md](SPEC.md). This page is the
@@ -43,7 +43,7 @@ last definition wins.
 
 ## Usage
 
-### Async (default — runs in a Worker thread)
+### Async (default — runs in Worker threads)
 
 ```javascript
 import SqlRite from "@possumtech/sqlrite";
@@ -56,11 +56,12 @@ const user = await sql.getUserByName.get({ name: "Alice" });
 
 Construct only via `open()` — the constructor throws otherwise. Methods return
 Promises. For file-backed databases, `.get()` / `.all()` first use the
-least-busy Worker in a host-relative read-only pool, so WAL-safe reads can
-proceed during long writes and other reads; SQLite reroutes result-returning
-mutations to the writer. `.run()` / `-- EXEC` / `-- TX` use the writer directly.
-An idle instance does not hold the process open; `close()` (or `await using`) is
-still the clean shutdown.
+least-busy Worker in a read-only pool—one reader by default—so WAL-safe reads
+can proceed during long writes. Configure additional readers explicitly when
+concurrent read demand warrants them. SQLite reroutes result-returning mutations
+to the writer; `.run()` / `-- EXEC` / `-- TX` use the writer directly. An idle
+instance does not hold the process open; `close()` (or `await using`) is still
+the clean shutdown.
 
 ### Sync
 
@@ -121,7 +122,7 @@ SELECT * FROM users WHERE name REGEXP $pattern;
 | `dir` | `string \| string[]` | `"sql"` | Directories scanned for `.sql` files. |
 | `functions` | `string \| string[]` | — | JS module paths for custom SQL functions. |
 | `params` | `object` | — | `$var` substitutions for `-- INIT` blocks. |
-| `readers` | `number` | `max(0, availableParallelism() - 1)` | Async file-backed read-only Worker count; `0` disables the pool. |
+| `readers` | `number` | `1` | Async file-backed read-only Worker count; `0` disables the pool. |
 
 SqlRite opens with a hardened, WAL-mode posture (foreign keys on, defensive mode,
 a non-zero `busy_timeout`) and exposes curated performance knobs (`cacheSize`,
