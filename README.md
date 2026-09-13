@@ -55,13 +55,14 @@ const user = await sql.getUserByName.get({ name: "Alice" });
 ```
 
 Construct only via `open()` — the constructor throws otherwise. Methods return
-Promises. For file-backed databases, `.get()` / `.all()` first use the
-least-busy Worker in a read-only pool—one reader by default—so WAL-safe reads
-can proceed during long writes. Configure additional readers explicitly when
-concurrent read demand warrants them. SQLite reroutes result-returning mutations
-to the writer; `.run()` / `-- EXEC` / `-- TX` use the writer directly. An idle
-instance does not hold the process open; `close()` (or `await using`) is still
-the clean shutdown.
+Promises. By default, an async instance has one writer Worker and every operation
+uses it. For a file-backed database, set `readers: 1` to add a read-only lane so
+WAL-safe reads can proceed during long writes; use a larger value only for
+measured concurrent-read demand. The total is `1 + readers` Workers per instance.
+With a reader pool configured, `.get()` / `.all()` use the least-busy reader and
+SQLite reroutes result-returning mutations to the writer; `.run()` / `-- EXEC` /
+`-- TX` use the writer directly. An idle instance does not hold the process open;
+`close()` (or `await using`) is still the clean shutdown.
 
 ### Sync
 
@@ -122,7 +123,7 @@ SELECT * FROM users WHERE name REGEXP $pattern;
 | `dir` | `string \| string[]` | `"sql"` | Directories scanned for `.sql` files. |
 | `functions` | `string \| string[]` | — | JS module paths for custom SQL functions. |
 | `params` | `object` | — | `$var` substitutions for `-- INIT` blocks. |
-| `readers` | `number` | `1` | Async file-backed read-only Worker count; `0` disables the pool. |
+| `readers` | `number` | `0` | Read-only Workers per file-backed async instance. Total Workers: `1 + readers`; positive values are invalid with `:memory:`. |
 
 SqlRite opens with a hardened, WAL-mode posture (foreign keys on, defensive mode,
 a non-zero `busy_timeout`) and exposes curated performance knobs (`cacheSize`,

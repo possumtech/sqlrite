@@ -16,7 +16,7 @@ before(() => {
 		"-- INIT: t\nCREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, v INTEGER) STRICT;\n" +
 			"-- INIT: workers\nCREATE TABLE IF NOT EXISTS workers (id INTEGER NOT NULL) STRICT;\n" +
 			"-- EXEC: recordWriter\nDELETE FROM workers; INSERT INTO workers (id) VALUES (workerId());\n" +
-			"-- PREP: workerIds\nSELECT (SELECT id FROM workers LIMIT 1) AS writer, workerId() AS reader;\n" +
+			"-- PREP: workerIds\nSELECT (SELECT id FROM workers LIMIT 1) AS writer, workerId() AS executing;\n" +
 			"-- PREP: slow\nSELECT sleep($ms) AS waited;\n" +
 			"-- PREP: quick\nSELECT 1 AS n;",
 	);
@@ -75,7 +75,7 @@ describe("async read Worker pool (#14)", () => {
 		await sql.close();
 	});
 
-	test("default uses exactly one reader separate from the writer", async () => {
+	test("default routes reads through the sole writer", async () => {
 		const sql = await SqlRite.open({
 			path: DB,
 			dir: DIR,
@@ -86,8 +86,25 @@ describe("async read Worker pool (#14)", () => {
 			const first = await sql.workerIds.get();
 			const second = await sql.workerIds.get();
 
-			assert.notStrictEqual(first.reader, first.writer, "default must preserve a reader lane");
-			assert.strictEqual(second.reader, first.reader, "default must create only one reader");
+			assert.strictEqual(first.executing, first.writer, "default must not create a reader");
+			assert.strictEqual(second.executing, first.writer, "default must keep using the writer");
+		} finally {
+			await sql.close();
+		}
+	});
+
+	test("readers: 1 creates a reader separate from the writer", async () => {
+		const sql = await SqlRite.open({
+			path: DB,
+			dir: DIR,
+			functions: FUNCTIONS,
+			readers: 1,
+		});
+		try {
+			await sql.recordWriter();
+			const ids = await sql.workerIds.get();
+
+			assert.notStrictEqual(ids.executing, ids.writer, "reads must use the configured reader");
 		} finally {
 			await sql.close();
 		}
@@ -100,8 +117,14 @@ describe("async read Worker pool (#14)", () => {
 			functions: FUNCTIONS,
 			readers: 0,
 		});
-		assert.strictEqual((await sql.quick.get()).n, 1);
-		await sql.close();
+		try {
+			await sql.recordWriter();
+			const ids = await sql.workerIds.get();
+
+			assert.strictEqual(ids.executing, ids.writer, "readers: 0 must use the writer");
+		} finally {
+			await sql.close();
+		}
 	});
 
 	test("invalid reader counts fail before opening Workers", async () => {

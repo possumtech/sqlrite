@@ -34,6 +34,8 @@ describe("codegen CLI", () => {
 		assert.match(dts, /export default class SqlRite \{/);
 		assert.match(dts, /export class SqlRiteSync \{/);
 		assert.match(dts, /static open\(options\?: SqlRiteOptions\): Promise<SqlRite>;/);
+		assert.match(dts, /Read-only Workers per file-backed async instance \(default 0\)\./);
+		assert.match(dts, /Total Workers are `1 \+ readers`;/);
 		assert.match(dts, /readers\?: number;/);
 		assert.match(dts, /\[method: string\]: any;/);
 		assert.match(dts, /\[Symbol\.asyncDispose\]\(\): Promise<void>;/);

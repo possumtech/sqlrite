@@ -49,7 +49,7 @@ export default class SqlRite {
 		if (merged.path === ":memory:" && (merged.readers ?? 0) > 0) {
 			throw new Error("SqlRite: readers cannot be used with an in-memory database");
 		}
-		this.#readerCount = merged.path === ":memory:" ? 0 : (merged.readers ?? 1);
+		this.#readerCount = merged.readers ?? 0;
 
 		this.#writer = this.#createWorker(merged, false);
 		this.#readyPromise = this.#initialize(merged);
