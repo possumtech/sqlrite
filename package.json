@@ -67,8 +67,8 @@
 		"postpack": "node -e \"for (const f of ['SqlRite.d.ts', 'SqlRiteSync.d.ts', 'SqlRiteCore.d.ts']) require('node:fs').rmSync(f, { force: true });\""
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.4",
-		"@types/node": "^26.1.1",
-		"typescript": "^6.0.3"
+		"@biomejs/biome": "2.5.14",
+		"@types/node": "^26.6.2",
+		"typescript": "^7.0.2"
 	}
 }
