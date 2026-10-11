@@ -9,24 +9,51 @@ export default class SqlRiteSync {
 	#metaBig;
 
 	/**
+	 * @param {import("node:sqlite").DatabaseSync} db
+	 * @param {unknown} initializationError
+	 */
+	static #closeAfterFailure(db, initializationError) {
+		try {
+			db.close();
+		} catch (cleanupError) {
+			throw new AggregateError(
+				[initializationError, cleanupError],
+				"SqlRite: initialization failed and closing the database also failed",
+				{ cause: initializationError },
+			);
+		}
+	}
+
+	/**
 	 * @param {import("./SqlRiteCore.js").SqlRiteOptions} [options]
-	 * @param {import("node:sqlite").DatabaseSync} [db]
+	 * @param {import("node:sqlite").DatabaseSync} [db] Connection whose ownership transfers to this instance.
 	 */
 	constructor(options = {}, db) {
 		const merged = { path: ":memory:", dir: "sql", ...options };
 		this.#db = db ?? SqlRiteCore.openDb(merged);
-		if (!db) SqlRiteCore.initDb(this.#db, merged);
-		this.#metaNum = SqlRiteCore.prepareMeta(this.#db, false);
-		this.#metaBig = SqlRiteCore.prepareMeta(this.#db, true);
-		this.#setupChunks(merged);
+		try {
+			if (!db) SqlRiteCore.initDb(this.#db, merged);
+			this.#metaNum = SqlRiteCore.prepareMeta(this.#db, false);
+			this.#metaBig = SqlRiteCore.prepareMeta(this.#db, true);
+			this.#setupChunks(merged);
+		} catch (error) {
+			SqlRiteSync.#closeAfterFailure(this.#db, error);
+			throw error;
+		}
 	}
 
 	/** @param {import("./SqlRiteCore.js").SqlRiteOptions} [options] */
 	static async open(options = {}) {
 		const merged = { path: ":memory:", dir: "sql", ...options };
 		const db = SqlRiteCore.openDb(merged);
-		SqlRiteCore.initDb(db, merged);
-		await SqlRiteCore.registerFunctions(db, merged.functions);
+		try {
+			SqlRiteCore.initDb(db, merged);
+			await SqlRiteCore.registerFunctions(db, merged.functions);
+		} catch (error) {
+			SqlRiteSync.#closeAfterFailure(db, error);
+			throw error;
+		}
+		// Ownership transfers here; the constructor closes the connection if SQL setup fails.
 		return new SqlRiteSync(merged, db);
 	}
 
