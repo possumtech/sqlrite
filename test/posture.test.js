@@ -222,4 +222,54 @@ describe("tuning knobs", () => {
 		);
 		db.close();
 	});
+	test("synchronous defaults to NORMAL on the writing connection", () => {
+		const db = SqlRiteCore.openDb({ path: ":memory:" });
+		SqlRiteCore.initDb(db, {});
+		assert.strictEqual(pragma(db, "synchronous"), 1);
+		db.close();
+	});
+
+	test("synchronous FULL, OFF, and EXTRA apply as documented", () => {
+		for (const [value, code] of [
+			["FULL", 2],
+			["OFF", 0],
+			["EXTRA", 3],
+		]) {
+			const db = SqlRiteCore.openDb({ path: ":memory:" });
+			SqlRiteCore.initDb(db, { synchronous: value });
+			assert.strictEqual(pragma(db, "synchronous"), code);
+			db.close();
+		}
+	});
+
+	test("an invalid synchronous value fails hard instead of weakening silently", () => {
+		const db = SqlRiteCore.openDb({ path: ":memory:" });
+		assert.throws(
+			() => SqlRiteCore.initDb(db, { synchronous: "yes" }),
+			/synchronous must be one of OFF, NORMAL, FULL, EXTRA/,
+		);
+		db.close();
+	});
+
+	test("synchronous is applied before migrations run", () => {
+		const db = SqlRiteCore.openDb({ path: ":memory:" });
+		const exec = db.exec.bind(db);
+		const order = [];
+		db.exec = (sql) => {
+			order.push(sql);
+			return exec(sql);
+		};
+		try {
+			SqlRiteCore.initDb(db, { synchronous: "FULL" });
+			SqlRiteCore.applyMigrations(db, [
+				{ type: "MIGRATE", name: "1", sql: "CREATE TABLE t (v);", version: 1 },
+			]);
+			const syncIndex = order.indexOf("PRAGMA synchronous = FULL;");
+			const migrationIndex = order.indexOf("CREATE TABLE t (v);");
+			assert.ok(syncIndex !== -1 && migrationIndex !== -1, "both statements must run");
+			assert.ok(syncIndex < migrationIndex, "synchronous must precede migration writes");
+		} finally {
+			db.close();
+		}
+	});
 });

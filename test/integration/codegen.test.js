@@ -39,6 +39,7 @@ describe("codegen CLI", () => {
 		assert.match(dts, /readers\?: number;/);
 		assert.match(dts, /\[method: string\]: any;/);
 		assert.match(dts, /\[Symbol\.asyncDispose\]\(\): Promise<void>;/);
+		assert.match(dts, /\t\}\n\nexport interface SqlRiteResult/);
 		assert.doesNotMatch(dts, /findUser/, "base output must not contain scanned methods");
 	});
 

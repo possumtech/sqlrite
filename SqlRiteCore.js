@@ -13,6 +13,7 @@ import { DatabaseSync } from "node:sqlite";
  * @property {number} [cacheSize] cache_size: positive = pages, negative = KiB of memory.
  * @property {number} [mmapSize] mmap_size: bytes of memory-mapped I/O; 0 disables. Inert on :memory:.
  * @property {number} [maxPageCount] max_page_count: hard db-size ceiling in pages.
+ * @property {"OFF"|"NORMAL"|"FULL"|"EXTRA"} [synchronous] synchronous: WAL commit durability; default NORMAL. Applied before migrations and INIT.
  */
 
 /**
@@ -83,6 +84,10 @@ export default class SqlRiteCore {
 		},
 	]);
 
+	// Documented PRAGMA synchronous values (https://www.sqlite.org/pragma.html#pragma_synchronous).
+	// Full enum, not a value veto: explicit OFF is a deliberate, visible choice.
+	static #SYNCHRONOUS = Object.freeze(["OFF", "NORMAL", "FULL", "EXTRA"]);
+
 	/**
 	 * @param {SqlRiteOptions & { path: string }} options
 	 * @returns {DatabaseSync}
@@ -152,7 +157,14 @@ export default class SqlRiteCore {
 			"PRAGMA journal_mode = WAL;",
 			options.timeout ?? SqlRiteCore.#DEFAULT_TIMEOUT,
 		);
-		db.exec("PRAGMA synchronous = NORMAL;");
+		// Applied before migrations and INIT blocks so the earliest writes on a
+		// connection can honor the selected durability; the default stays NORMAL,
+		// SQLite's recommended WAL posture.
+		const synchronous = options.synchronous ?? "NORMAL";
+		if (!SqlRiteCore.#SYNCHRONOUS.includes(synchronous)) {
+			throw new Error(`SqlRite: synchronous must be one of ${SqlRiteCore.#SYNCHRONOUS.join(", ")}`);
+		}
+		db.exec(`PRAGMA synchronous = ${synchronous};`);
 
 		for (const { option, pragma, ok, want } of SqlRiteCore.#TUNING) {
 			const value = options[option];

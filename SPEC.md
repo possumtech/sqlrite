@@ -229,8 +229,10 @@ throw at construction.
 
 ### Connection posture
 
-SqlRite applies these via `PRAGMA` on every connection: `journal_mode = WAL`,
-`synchronous = NORMAL`.
+SqlRite applies `journal_mode = WAL` via `PRAGMA` on every connection. It also
+applies `synchronous` — `NORMAL` by default, selectable via the tuning knob
+below — before migrations and `-- INIT` blocks, so the earliest writes on a
+connection can be made durable.
 
 It also sets these `DatabaseSync` options, each overridable by passing the same
 key in your own options:
@@ -244,15 +246,16 @@ key in your own options:
 
 ### Tuning knobs
 
-A small, curated set of overridable performance knobs, applied as
-integer-validated `PRAGMA`s on every connection. Each is optional and off unless
-you pass it; a non-integer (or out-of-range) value throws at open.
+A small, curated set of overridable knobs, applied as validated `PRAGMA`s on
+every connection. Each is optional and off unless you pass it; a value outside
+its type or range throws at open.
 
 | Option | Type | PRAGMA | Notes |
 | :-- | :-- | :-- | :-- |
 | `cacheSize` | `number` | `cache_size` | Positive = pages; negative = KiB of memory. |
 | `mmapSize` | `number` (≥ 0) | `mmap_size` | Bytes of memory-mapped I/O; `0` disables. Inert on `:memory:` (nothing to map). |
 | `maxPageCount` | `number` (> 0) | `max_page_count` | Hard db-size ceiling in pages — a disk-fill guard. |
+| `synchronous` | `"OFF" \| "NORMAL" \| "FULL" \| "EXTRA"` | `synchronous` | WAL commit durability, default `NORMAL` — applied before migrations and `-- INIT`, so a migration can rely on the selected durability. `OFF` skips fsyncs: the most recent commits may be lost on power loss (never corruption). |
 
 ## Functions
 
@@ -385,6 +388,11 @@ does not do.
   (`5000` ms). A second PRAGMA-based option would be redundant.
 - **Tuning knobs are curated.** `cacheSize`/`mmapSize`/`maxPageCount` are exposed
   with integer validation — SqlRite is not a generic PRAGMA passthrough.
+- **`synchronous` is enum-validated over SQLite's full documented set.**
+  `OFF` / `NORMAL` / `FULL` / `EXTRA`, default `NORMAL` — SQLite's recommended
+  WAL posture. Explicit `OFF` is a visible choice, not silent loss: the
+  fail-hard invariant targets surprises, not deliberate trade-offs. The setting
+  is applied before migrations because `-- INIT` runs too late to cover them.
 - **`PRAGMA dml_strict` is fiction.** Not a real pragma (it reads back
   `undefined`). The DQS-rejection it claimed is already the `node:sqlite` default
   via `enableDoubleQuotedStringLiterals: false`. Verified on Node 26.3.1.

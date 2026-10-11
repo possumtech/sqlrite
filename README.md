@@ -126,8 +126,8 @@ SELECT * FROM users WHERE name REGEXP $pattern;
 | `readers` | `number` | `0` | Read-only Workers per file-backed async instance. Total Workers: `1 + readers`; positive values are invalid with `:memory:`. |
 
 SqlRite opens with a hardened, WAL-mode posture (foreign keys on, defensive mode,
-a non-zero `busy_timeout`) and exposes curated performance knobs (`cacheSize`,
-`mmapSize`, `maxPageCount`). Every default is overridable; any other key passes
+a non-zero `busy_timeout`) and exposes curated knobs (`cacheSize`, `mmapSize`,
+`maxPageCount`, `synchronous`). Every default is overridable; any other key passes
 through to `node:sqlite`. Full tables in [SPEC.md](SPEC.md#configuration).
 
 ## Built-in SQL functions
