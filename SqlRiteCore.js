@@ -13,7 +13,7 @@ import { DatabaseSync } from "node:sqlite";
  * @property {number} [cacheSize] cache_size: positive = pages, negative = KiB of memory.
  * @property {number} [mmapSize] mmap_size: bytes of memory-mapped I/O; 0 disables. Inert on :memory:.
  * @property {number} [maxPageCount] max_page_count: hard db-size ceiling in pages.
- * @property {"OFF"|"NORMAL"|"FULL"|"EXTRA"} [synchronous] synchronous: WAL commit durability; default NORMAL. Applied before migrations and INIT.
+ * @property {"OFF"|"NORMAL"|"FULL"|"EXTRA"} [synchronous] WAL synchronization policy (default NORMAL). OFF can corrupt after an OS crash or power loss; EXTRA equals FULL in WAL.
  */
 
 /**
@@ -158,9 +158,9 @@ export default class SqlRiteCore {
 			options.timeout ?? SqlRiteCore.#DEFAULT_TIMEOUT,
 		);
 		// Applied before migrations and INIT blocks so the earliest writes on a
-		// connection can honor the selected durability; the default stays NORMAL,
+		// connection can honor the selected synchronization policy; the default stays NORMAL,
 		// SQLite's recommended WAL posture.
-		const synchronous = options.synchronous ?? "NORMAL";
+		const synchronous = options.synchronous === undefined ? "NORMAL" : options.synchronous;
 		if (!SqlRiteCore.#SYNCHRONOUS.includes(synchronous)) {
 			throw new Error(`SqlRite: synchronous must be one of ${SqlRiteCore.#SYNCHRONOUS.join(", ")}`);
 		}

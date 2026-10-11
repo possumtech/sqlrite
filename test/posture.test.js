@@ -242,13 +242,15 @@ describe("tuning knobs", () => {
 		}
 	});
 
-	test("an invalid synchronous value fails hard instead of weakening silently", () => {
-		const db = SqlRiteCore.openDb({ path: ":memory:" });
-		assert.throws(
-			() => SqlRiteCore.initDb(db, { synchronous: "yes" }),
-			/synchronous must be one of OFF, NORMAL, FULL, EXTRA/,
-		);
-		db.close();
+	test("invalid synchronous values fail hard instead of weakening silently", () => {
+		for (const synchronous of ["yes", "full", 2, false, {}, null]) {
+			const db = SqlRiteCore.openDb({ path: ":memory:" });
+			assert.throws(
+				() => SqlRiteCore.initDb(db, { synchronous }),
+				/synchronous must be one of OFF, NORMAL, FULL, EXTRA/,
+			);
+			db.close();
+		}
 	});
 
 	test("synchronous is applied before migrations run", () => {
