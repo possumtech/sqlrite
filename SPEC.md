@@ -231,8 +231,8 @@ throw at construction.
 
 SqlRite applies `journal_mode = WAL` via `PRAGMA` on every connection. It also
 applies `synchronous` — `NORMAL` by default, selectable via the tuning knob
-below — before migrations and `-- INIT` blocks, so the earliest writes on a
-connection can be made durable.
+below — before migrations and `-- INIT` blocks, so the earliest writes use the
+selected synchronization policy.
 
 It also sets these `DatabaseSync` options, each overridable by passing the same
 key in your own options:
@@ -247,15 +247,25 @@ key in your own options:
 ### Tuning knobs
 
 A small, curated set of overridable knobs, applied as validated `PRAGMA`s on
-every connection. Each is optional and off unless you pass it; a value outside
-its type or range throws at open.
+every connection. `synchronous` is always applied (`NORMAL` by default); the
+other knobs leave SQLite's existing setting unchanged when omitted. A supplied
+value outside its type or range throws at open.
 
 | Option | Type | PRAGMA | Notes |
 | :-- | :-- | :-- | :-- |
 | `cacheSize` | `number` | `cache_size` | Positive = pages; negative = KiB of memory. |
 | `mmapSize` | `number` (≥ 0) | `mmap_size` | Bytes of memory-mapped I/O; `0` disables. Inert on `:memory:` (nothing to map). |
 | `maxPageCount` | `number` (> 0) | `max_page_count` | Hard db-size ceiling in pages — a disk-fill guard. |
-| `synchronous` | `"OFF" \| "NORMAL" \| "FULL" \| "EXTRA"` | `synchronous` | WAL commit durability, default `NORMAL` — applied before migrations and `-- INIT`, so a migration can rely on the selected durability. `OFF` skips fsyncs: the most recent commits may be lost on power loss (never corruption). |
+| `synchronous` | `"OFF" \| "NORMAL" \| "FULL" \| "EXTRA"` | `synchronous` | WAL synchronization policy, default `NORMAL` — applied before migrations and `-- INIT`. |
+
+For SqlRite's WAL connections, SQLite defines the modes as follows:
+
+| Mode | WAL behavior after an operating-system crash or power loss |
+| :-- | :-- |
+| `OFF` | Skips filesystem synchronization. The database can be left corrupt; use only for deliberately rebuildable data. |
+| `NORMAL` | Preserves database consistency, but a recent committed transaction can be rolled back. This is SqlRite's default. |
+| `FULL` | Synchronizes the WAL at each commit; SQLite classifies this as ACID. |
+| `EXTRA` | Equivalent to `FULL` in WAL mode. Accepted as an explicit SQLite policy even though it adds no present WAL behavior. |
 
 ## Functions
 
@@ -390,9 +400,11 @@ does not do.
   with integer validation — SqlRite is not a generic PRAGMA passthrough.
 - **`synchronous` is enum-validated over SQLite's full documented set.**
   `OFF` / `NORMAL` / `FULL` / `EXTRA`, default `NORMAL` — SQLite's recommended
-  WAL posture. Explicit `OFF` is a visible choice, not silent loss: the
-  fail-hard invariant targets surprises, not deliberate trade-offs. The setting
-  is applied before migrations because `-- INIT` runs too late to cover them.
+  WAL posture. Explicit `OFF` remains available for deliberately rebuildable
+  data, with its corruption risk documented; `EXTRA` remains available as the
+  exact SQLite enum even though it equals `FULL` under WAL. The fail-hard
+  invariant targets surprises, not deliberate trade-offs. The setting is
+  applied before migrations because `-- INIT` runs too late to cover them.
 - **`PRAGMA dml_strict` is fiction.** Not a real pragma (it reads back
   `undefined`). The DQS-rejection it claimed is already the `node:sqlite` default
   via `enableDoubleQuotedStringLiterals: false`. Verified on Node 26.3.1.

@@ -124,11 +124,19 @@ SELECT * FROM users WHERE name REGEXP $pattern;
 | `functions` | `string \| string[]` | — | JS module paths for custom SQL functions. |
 | `params` | `object` | — | `$var` substitutions for `-- INIT` blocks. |
 | `readers` | `number` | `0` | Read-only Workers per file-backed async instance. Total Workers: `1 + readers`; positive values are invalid with `:memory:`. |
+| `synchronous` | `"OFF" \| "NORMAL" \| "FULL" \| "EXTRA"` | `"NORMAL"` | SQLite WAL synchronization policy, applied before migrations and `-- INIT`. |
 
 SqlRite opens with a hardened, WAL-mode posture (foreign keys on, defensive mode,
 a non-zero `busy_timeout`) and exposes curated knobs (`cacheSize`, `mmapSize`,
 `maxPageCount`, `synchronous`). Every default is overridable; any other key passes
 through to `node:sqlite`. Full tables in [SPEC.md](SPEC.md#configuration).
+
+Under SQLite's WAL guarantees, `NORMAL` preserves database consistency but a
+recent commit can roll back after an operating-system crash or power loss;
+`FULL` makes each commit durable; and `EXTRA` is equivalent to `FULL`. `OFF`
+skips filesystem synchronization and can leave the database corrupt after an
+operating-system crash or power loss — use it only when the data is deliberately
+rebuildable.
 
 ## Built-in SQL functions
 

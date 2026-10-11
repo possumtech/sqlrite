@@ -37,9 +37,11 @@ describe("codegen CLI", () => {
 		assert.match(dts, /Read-only Workers per file-backed async instance \(default 0\)\./);
 		assert.match(dts, /Total Workers are `1 \+ readers`;/);
 		assert.match(dts, /readers\?: number;/);
+		assert.match(dts, /OFF can corrupt after an OS crash or power loss/);
+		assert.match(dts, /synchronous\?: "OFF" \| "NORMAL" \| "FULL" \| "EXTRA";/);
 		assert.match(dts, /\[method: string\]: any;/);
 		assert.match(dts, /\[Symbol\.asyncDispose\]\(\): Promise<void>;/);
-		assert.match(dts, /\t\}\n\nexport interface SqlRiteResult/);
+		assert.match(dts, /\n\}\n\nexport interface SqlRiteResult/);
 		assert.doesNotMatch(dts, /findUser/, "base output must not contain scanned methods");
 	});
 
