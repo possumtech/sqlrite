@@ -1,6 +1,5 @@
 # SqlRite
 
-[![check](https://github.com/possumtech/sqlrite/actions/workflows/check.yml/badge.svg)](https://github.com/possumtech/sqlrite/actions/workflows/check.yml)
 [![npm](https://img.shields.io/npm/v/%40possumtech%2Fsqlrite)](https://www.npmjs.com/package/@possumtech/sqlrite)
 [![node](https://raw.githubusercontent.com/possumtech/sqlrite/main/.github/badges/node.svg)](https://nodejs.org)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
