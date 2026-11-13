@@ -18,7 +18,9 @@ before(() => {
 			"-- EXEC: recordWriter\nDELETE FROM workers; INSERT INTO workers (id) VALUES (workerId());\n" +
 			"-- PREP: workerIds\nSELECT (SELECT id FROM workers LIMIT 1) AS writer, workerId() AS executing;\n" +
 			"-- PREP: slow\nSELECT sleep($ms) AS waited;\n" +
-			"-- PREP: quick\nSELECT 1 AS n;",
+			"-- PREP: quick\nSELECT 1 AS n;\n" +
+			"-- PREP: itemById\nSELECT id, v FROM t WHERE id = $id;\n" +
+			"-- PREP: addItem\nINSERT INTO t (id, v) VALUES ($id, $v) RETURNING id, v;",
 	);
 	fs.writeFileSync(
 		`${FUNCTION_DIR}/sleep.js`,
@@ -105,6 +107,24 @@ describe("async read Worker pool (#14)", () => {
 			const ids = await sql.workerIds.get();
 
 			assert.notStrictEqual(ids.executing, ids.writer, "reads must use the configured reader");
+		} finally {
+			await sql.close();
+		}
+	});
+
+	test("settled empty reads do not pin dependent observations (#5)", async () => {
+		const sql = await SqlRite.open({ path: DB, dir: DIR, functions: FUNCTIONS, readers: 1 });
+
+		try {
+			assert.deepEqual(await sql.itemById.all({ id: 1 }), []);
+
+			await sql.addItem.get({ id: 1, v: 10 });
+			assert.deepEqual(await sql.itemById.all({ id: 1 }), [{ id: 1, v: 10 }]);
+
+			assert.strictEqual(await sql.itemById.get({ id: 2 }), undefined);
+
+			await sql.addItem.get({ id: 2, v: 20 });
+			assert.deepEqual(await sql.itemById.get({ id: 2 }), { id: 2, v: 20 });
 		} finally {
 			await sql.close();
 		}
